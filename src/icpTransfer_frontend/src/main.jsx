@@ -3,12 +3,11 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.scss';
 import "@nfid/identitykit/react/styles.css"
-import { BrowserRouter as Router } from 'react-router-dom';
 import { canisterId } from '../../declarations/icpTransfer_backend';
 import { IdentityKitAuthType, IdentityKitTransportType } from "@nfid/identitykit"
 import { IdentityKitProvider } from "@nfid/identitykit/react"
 import { NFIDW, InternetIdentity, Stoic, OISY } from "@nfid/identitykit"
-import Test from './Test';
+import { BrowserRouter as Router } from 'react-router-dom';
 
 const localInternetIdentity = {
   ...InternetIdentity,
@@ -29,8 +28,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       signerClientOptions={{
         targets: [canisterId]
       }}>
-      <Test />
-      {/* <App /> */}
+      {/* <Test /> */}
+       <App /> 
     </IdentityKitProvider>
   </Router>
   // </React.StrictMode>,
