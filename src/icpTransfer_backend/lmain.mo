@@ -10,64 +10,16 @@ import Nat64 "mo:base/Nat64";
 import Nat8 "mo:base/Nat8";
 import Text "mo:base/Text";
 import Buffer "mo:base/Buffer";
-import Bool "mo:base/Bool";
 import Map "mo:map/Map";
 import Hex "mo:encoding/Hex";
 import Vector "mo:vector";
 import { thash } "mo:map/Map";
+import Types "./Types";
 
 actor IcpTransfer_backend {
 
-    type Tokens = {
-        e8s : Nat64;
-    };
-
-    type Donation = {
-        account : Text;
-        amount : Tokens;
-        transaction_id : Nat64;
-    };
-
-    type User = {
-        created_proposals : [Nat64];
-        donated_proposals : [Nat64];
-    };
-
-    type Proposal = {
-        index : Nat64;
-        name : Text;
-        title : Text;
-        description : Text;
-        amount_required : Nat64;
-        image : Blob;
-        subaccount : Blob;
-        accountId : Text;
-        created_by : Principal;
-        donations : [Donation];
-        synced_upto : Nat64;
-        amount_raised : Nat64;
-        claimed : Bool;
-    };
-
-    type Vector<Proposal> = {
-        var data_blocks : [var [var ?Proposal]];
-        var i_block : Nat;
-        var i_element : Nat;
-    };
-
-    type HashUtils<Principal> = (
-        getHash : (Principal) -> Nat32,
-        areEqual : (Principal, Principal) -> Bool,
-    );
-
-    stable var users = Map.new<Text, User>();
-    stable var proposals : Vector<Proposal> = Vector.new<Proposal>();
-
-    type TransferArgs = {
-        amount : Tokens;
-        toPrincipal : Principal;
-        toSubaccount : ?Blob;
-    };
+    stable var users = Map.new<Text, Types.User>();
+    stable var proposals : Types.Vector<Types.Proposal> = Vector.new<Types.Proposal>();
 
     private func fromNat(len : Nat, n : Nat) : [Nat8] {
         let ith_byte = func(i : Nat) : Nat8 {
@@ -82,12 +34,11 @@ actor IcpTransfer_backend {
         fromNat(32, Nat64.toNat(n));
     };
 
-    public func createProposal(name : Text, title : Text, description : Text, amount_required : Nat64, image : Blob) : async Result.Result<Nat, Text> {
-        let caller = Principal.fromText("recv4-pufm4-ddgc3-m6whc-kh75g-hfklr-oj46z-bxn2y-coejw-xt5kw-xae");
-        let proposal_size = Vector.size<Proposal>(proposals);
+    public shared ({ caller }) func createProposal(name : Text, title : Text, description : Text, amount_required : Nat64, image : Blob) : async Result.Result<Nat, Text> {
+        let proposal_size = Vector.size<Types.Proposal>(proposals);
         let proposal_subaccount = Blob.fromArray(fromNat64(Nat64.fromNat(proposal_size)));
         let current_round = (await LedgerIndex.status()).num_blocks_synced - 1;
-        let newProposal : Proposal = {
+        let newProposal : Types.Proposal = {
             name = name;
             title = title;
             description = description;
@@ -102,41 +53,34 @@ actor IcpTransfer_backend {
             claimed = false;
             index = Nat64.fromNat(proposal_size);
         };
-        Vector.add<Proposal>(proposals, newProposal);
+        Vector.add<Types.Proposal>(proposals, newProposal);
         addCreatedProposalToUsers(caller, Nat64.fromNat(proposal_size));
         return #ok(proposal_size);
     };
 
-    public func getProposal(id : Nat) : async Result.Result<Proposal, Text> {
-        var size = Vector.size<Proposal>(proposals);
+    public func getProposal(id : Nat) : async Result.Result<Types.Proposal, Text> {
+        var size = Vector.size<Types.Proposal>(proposals);
         if (id >= size) {
             return #err("No Proposal is available with this id");
         } else {
-            var proposal = Vector.getOpt<Proposal>(proposals, id);
+            var proposal = Vector.getOpt<Types.Proposal>(proposals, id);
             switch (proposal) {
                 case (null) {
                     return #err("No Proposal is available with this id");
                 };
                 case (?proposal) {
-                    switch (await syncTransactions(id)) {
-                        case (#ok proposal) {
-                            return #ok(proposal);
-                        };
-                        case (#err message) {
-                            return #err("Error Occured While Syncing Transactions: " #message);
-                        };
-                    };
+                    return #ok(proposal);
                 };
             };
         };
     };
 
     public func accountIdent(id : Nat) : async Result.Result<Text, Text> {
-        var size = Vector.size<Proposal>(proposals);
+        var size = Vector.size<Types.Proposal>(proposals);
         if (id >= size) {
             return #err("No Proposal is available with this id");
         } else {
-            var proposal = Vector.getOpt<Proposal>(proposals, id);
+            var proposal = Vector.getOpt<Types.Proposal>(proposals, id);
             switch (proposal) {
                 case (null) {
                     return #err("No Proposal is available with this id");
@@ -147,7 +91,7 @@ actor IcpTransfer_backend {
                         account = account;
                     });
                     var accid = Text.toLowercase(Hex.encode(Blob.toArray(account)));
-                    Debug.print(debug_show (account) # debug_show (balance) # debug_show (accid) # debug_show(Principal.fromActor(IcpTransfer_backend)));
+                    Debug.print(debug_show (account) # debug_show (balance) # debug_show (accid) # debug_show (Principal.fromActor(IcpTransfer_backend)));
                     return #ok("knk");
                 };
             };
@@ -155,15 +99,15 @@ actor IcpTransfer_backend {
     };
 
     public func actorAccount() : async Text {
-        return Hex.encode(Blob.toArray(Principal.toLedgerAccount(Principal.fromActor(IcpTransfer_backend),null)));
+        return Hex.encode(Blob.toArray(Principal.toLedgerAccount(Principal.fromActor(IcpTransfer_backend), null)));
     };
 
-    public query func getLatestProposals(len : Nat) : async Result.Result<[Proposal], Text> {
-        var size = Vector.size<Proposal>(proposals);
+    public query func getLatestProposals(len : Nat) : async Result.Result<[Types.Proposal], Text> {
+        var size = Vector.size<Types.Proposal>(proposals);
         if (size > 0) {
-            var arr = Vector.toArray<Proposal>(proposals);
+            var arr = Vector.toArray<Types.Proposal>(proposals);
             if (size > len) {
-                var res = Array.subArray<Proposal>(arr, size -len, len);
+                var res = Array.subArray<Types.Proposal>(arr, size -len, len);
                 return #ok(res);
             } else {
                 return #ok(arr);
@@ -173,18 +117,17 @@ actor IcpTransfer_backend {
         };
     };
 
-    public query func getLatestMyProposals(len : Nat) : async Result.Result<[Proposal], Text> {
-        let caller = Principal.fromText("recv4-pufm4-ddgc3-m6whc-kh75g-hfklr-oj46z-bxn2y-coejw-xt5kw-xae");
-        var size = Vector.size<Proposal>(proposals);
+    public shared query ({ caller }) func getLatestMyProposals(len : Nat) : async Result.Result<[Types.Proposal], Text> {
+        var size = Vector.size<Types.Proposal>(proposals);
         if (size > 0) {
-            var arr = Vector.toArray<Proposal>(proposals);
+            var arr = Vector.toArray<Types.Proposal>(proposals);
             var r_len = 0;
-            switch (Map.get<Text, User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(caller, null)))))) {
+            switch (Map.get<Text, Types.User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(caller, null)))))) {
                 case (null) {
                     return #ok([]);
                 };
                 case (?user) {
-                    var props = Buffer.Buffer<Proposal>(3);
+                    var props = Buffer.Buffer<Types.Proposal>(3);
                     var created_proposals = user.created_proposals;
                     for (pid in created_proposals.vals()) {
                         if (r_len < len) {
@@ -192,7 +135,7 @@ actor IcpTransfer_backend {
                             props.add(arr[Nat64.toNat(pid)]);
                         };
                     };
-                    return #ok(Buffer.toArray<Proposal>(props));
+                    return #ok(Buffer.toArray<Types.Proposal>(props));
                 };
             };
         } else {
@@ -201,16 +144,16 @@ actor IcpTransfer_backend {
     };
 
     public query func getProposalsLength() : async Nat {
-        var size = Vector.size<Proposal>(proposals);
+        var size = Vector.size<Types.Proposal>(proposals);
         return size;
     };
 
-    public func syncTransactions(proposalId : Nat) : async Result.Result<Proposal, Text> {
-        var size = Vector.size<Proposal>(proposals);
+    public func syncTransactions(proposalId : Nat) : async Result.Result<Types.Proposal, Text> {
+        var size = Vector.size<Types.Proposal>(proposals);
         if (proposalId >= size) {
             return #err("No Proposal is available with this id");
         } else {
-            var proposal = Vector.getOpt<Proposal>(proposals, proposalId);
+            var proposal = Vector.getOpt<Types.Proposal>(proposals, proposalId);
             switch (proposal) {
                 case (null) {
                     return #err("No Proposal is available with this id");
@@ -243,7 +186,7 @@ actor IcpTransfer_backend {
                             var txns = response.transactions;
                             let buf_txns = Buffer.fromArray<LedgerIndex.TransactionWithId>(txns);
                             var new_amount_raised : Nat64 = proposal.amount_raised;
-                            var new_donations = Buffer.Buffer<Donation>(3);
+                            var new_donations = Buffer.Buffer<Types.Donation>(3);
                             Debug.print(
                                 " buff "
                                 # debug_show (Buffer.toArray<LedgerIndex.TransactionWithId>(buf_txns))
@@ -255,7 +198,7 @@ actor IcpTransfer_backend {
                                         case (#Transfer txn_params) {
                                             if (Text.toUppercase(txn_params.to) == Text.toUppercase(proposal_account_identifier_text)) {
                                                 if (txn.id > synced_upto) {
-                                                    var new_donation : Donation = {
+                                                    var new_donation : Types.Donation = {
                                                         account = txn_params.from;
                                                         amount = txn_params.amount;
                                                         transaction_id = txn.id;
@@ -278,9 +221,9 @@ actor IcpTransfer_backend {
                                     };
                                 },
                             );
-                            var old_donations = Buffer.fromArray<Donation>(proposal.donations);
+                            var old_donations = Buffer.fromArray<Types.Donation>(proposal.donations);
                             old_donations.append(new_donations);
-                            var new_proposal : Proposal = {
+                            var new_proposal : Types.Proposal = {
                                 name = proposal.name;
                                 title = proposal.title;
                                 description = proposal.description;
@@ -295,7 +238,7 @@ actor IcpTransfer_backend {
                                 claimed = false;
                                 index = proposal.index;
                             };
-                            Vector.put<Proposal>(proposals, proposalId, new_proposal);
+                            Vector.put<Types.Proposal>(proposals, proposalId, new_proposal);
                             return #ok(new_proposal);
                         };
                         case (#Err error) {
@@ -308,13 +251,12 @@ actor IcpTransfer_backend {
         };
     };
 
-    public shared ({caller}) func claimProposal(proposalId : Nat, p : Principal) : async Result.Result<IcpLedger.BlockIndex, Text> {
-        let caller = Principal.fromText("recv4-pufm4-ddgc3-m6whc-kh75g-hfklr-oj46z-bxn2y-coejw-xt5kw-xae");
-        var size = Vector.size<Proposal>(proposals);
+    public shared ({ caller }) func claimProposal(proposalId : Nat, p : Principal) : async Result.Result<IcpLedger.BlockIndex, Text> {
+        var size = Vector.size<Types.Proposal>(proposals);
         if (proposalId >= size) {
             return #err("No Proposal is available with this id");
         } else {
-            var proposal = Vector.getOpt<Proposal>(proposals, proposalId);
+            var proposal = Vector.getOpt<Types.Proposal>(proposals, proposalId);
             switch (proposal) {
                 case (null) {
                     return #err("No Proposal is available with this id");
@@ -365,7 +307,7 @@ actor IcpTransfer_backend {
                                                     claimed = true;
                                                     index = proposal.index;
                                                 };
-                                                Vector.put<Proposal>(proposals, proposalId, new_proposal);
+                                                Vector.put<Types.Proposal>(proposals, proposalId, new_proposal);
                                                 return #ok(blockIndex);
                                             };
                                         };
@@ -389,24 +331,24 @@ actor IcpTransfer_backend {
     };
 
     private func addCreatedProposalToUsers(principal : Principal, proposalId : Nat64) : () {
-        switch (Map.get<Text, User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))))) {
+        switch (Map.get<Text, Types.User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))))) {
             case (null) {
-                var new_user : User = {
+                var new_user : Types.User = {
                     created_proposals = [proposalId];
                     donated_proposals = [];
                 };
-                Map.set<Text, User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))), new_user);
+                Map.set<Text, Types.User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))), new_user);
             };
             case (?user) {
                 var new_created_proposals = Buffer.fromArray<Nat64>(user.created_proposals);
                 switch (Buffer.indexOf<Nat64>(proposalId, new_created_proposals, Nat64.equal)) {
                     case (null) {
                         new_created_proposals.add(proposalId);
-                        var new_user : User = {
+                        var new_user : Types.User = {
                             created_proposals = Buffer.toArray(new_created_proposals);
                             donated_proposals = user.donated_proposals;
                         };
-                        Map.set<Text, User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))), new_user);
+                        Map.set<Text, Types.User>(users, thash, Text.toLowercase(Hex.encode(Blob.toArray(Principal.toLedgerAccount(principal, null)))), new_user);
                     };
                     case (?_index) {
                         return ();
@@ -417,24 +359,24 @@ actor IcpTransfer_backend {
     };
 
     private func addDonatedProposalToUsers(account : Text, proposalId : Nat64) : () {
-        switch (Map.get<Text, User>(users, thash, account)) {
+        switch (Map.get<Text, Types.User>(users, thash, account)) {
             case (null) {
-                var new_user : User = {
+                var new_user : Types.User = {
                     created_proposals = [];
                     donated_proposals = [proposalId];
                 };
-                Map.set<Text, User>(users, thash, account, new_user);
+                Map.set<Text, Types.User>(users, thash, account, new_user);
             };
             case (?user) {
                 var new_donated_proposals = Buffer.fromArray<Nat64>(user.donated_proposals);
                 switch (Buffer.indexOf<Nat64>(proposalId, new_donated_proposals, Nat64.equal)) {
                     case (null) {
                         new_donated_proposals.add(proposalId);
-                        var new_user : User = {
+                        var new_user : Types.User = {
                             created_proposals = user.created_proposals;
                             donated_proposals = Buffer.toArray(new_donated_proposals);
                         };
-                        Map.set<Text, User>(users, thash, account, new_user);
+                        Map.set<Text, Types.User>(users, thash, account, new_user);
                     };
                     case (?_index) {
                         return ();
@@ -448,7 +390,7 @@ actor IcpTransfer_backend {
         return Principal.toText(caller);
     };
 
-    public func transfer(args : TransferArgs) : async Result.Result<IcpLedger.BlockIndex, Text> {
+    public func transfer(args : Types.TransferArgs) : async Result.Result<IcpLedger.BlockIndex, Text> {
         Debug.print(
             "Transferring "
             # debug_show (args.amount)
@@ -494,7 +436,7 @@ actor IcpTransfer_backend {
         account : IcpLedger.AccountIdentifier;
     };
 
-    public shared ({ caller }) func balance() : async Result.Result<Tokens, Text> {
+    public shared ({ caller }) func balance() : async Result.Result<Types.Tokens, Text> {
         let args : AccountBalanceArgs = {
             account = Principal.toLedgerAccount(caller, null);
         };
