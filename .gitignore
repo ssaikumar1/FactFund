@@ -27,3 +27,5 @@ dist/
 .mops
 
 tasks.txt
+
+accounts/*

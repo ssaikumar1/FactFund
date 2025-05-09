@@ -24,7 +24,7 @@
           "playground": "ryjl3-tyaaa-aaaaa-aaaba-cai"
         }
       },
-      "init_arg" : "(variant { Init = record { minting_account = \"e3a5333adf4adde83782cdd3de9c1cf2ae78ce223f5883e007ebfc007db70f38\"; initial_values = vec { record { \"98da03def2a04f2297eb45fbcbff20ca0f14415709da55aa91a553b2df4f806a\"; record { e8s = 10_000_000_000 : nat64; }; }; }; send_whitelist = vec {}; transfer_fee = opt record { e8s = 10_000 : nat64; }; token_symbol = opt \"LICP\"; token_name = opt \"Local ICP\"; } })"
+      "init_arg" : "(variant { Init = record { minting_account = \"e3a5333adf4adde83782cdd3de9c1cf2ae78ce223f5883e007ebfc007db70f38\"; initial_values = vec { record { \"1254bada011e8051f958e67d7d5daea62508b3231357d761ef01e86526cca0c1\"; record { e8s = 10_000_000_000 : nat64; }; }; }; send_whitelist = vec {}; transfer_fee = opt record { e8s = 10_000 : nat64; }; token_symbol = opt \"LICP\"; token_name = opt \"Local ICP\"; } })"
     },
     "icp_index_canister": {
       "type": "custom",

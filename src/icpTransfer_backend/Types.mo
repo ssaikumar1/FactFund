@@ -5,7 +5,6 @@ module {
         subaccount : Blob;
         accountId : Text;
         created_proposals : [Nat64];
-        donated_proposals : [Nat64];
         locked_balance : Nat64;
     };
 
@@ -19,7 +18,6 @@ module {
         accountId : Text;
         created_by : Principal;
         amount_required : Nat64;
-        amount_raised : Nat64;
         claimed : Bool;
     };
 
