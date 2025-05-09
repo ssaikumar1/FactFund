@@ -1,3 +1,4 @@
+// ======= IMPORTS =======
 import IcpLedger "canister:icp_ledger_canister";
 import Result "mo:base/Result";
 import Principal "mo:base/Principal";
@@ -6,7 +7,7 @@ import Bool "mo:base/Bool";
 import Nat "mo:base/Nat";
 import Map "mo:map/Map";
 import Vector "mo:vector";
-import { phash } "mo:map/Map";
+import { phash; n64hash } "mo:map/Map";
 import Nat64 "mo:base/Nat64";
 import Buffer "mo:base/Buffer";
 import Array "mo:base/Array";
@@ -14,14 +15,20 @@ import Debug "mo:base/Debug";
 import Float "mo:base/Float";
 import Types "./Types";
 import Utils "./Utils";
+
 actor IcpTransfer_backend {
 
+    // ======= STATE VARIABLES =======
     stable var users = Map.new<Principal, Types.User>();
     stable var proposals : Types.Vector<Types.Proposal> = Vector.new<Types.Proposal>();
+    stable var proposal_files = Map.new<Nat64, Types.Vector<Types.File>>();
 
-    stable var proposal_fee : Nat64 = 2 * (10 ** 8);
+    stable var proposal_fee : Nat64 = 2 * (10 ** 8); // 2 ICP in e8s
     stable var fee_sink : Principal = Principal.fromText("gyvkh-qm3gw-myzkz-awlbs-g2yok-3qiuv-i44w2-mmzjj-jkd2r-wuikv-sae");
 
+    // ======= USER MANAGEMENT FUNCTIONS =======
+    
+    // Get or create a user based on caller principal
     private func _getOrCreateUser(caller : Principal) : Types.User {
         let user = Map.get<Principal, Types.User>(users, phash, caller);
         switch (user) {
@@ -43,6 +50,7 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Public endpoint to get or create a user
     public shared ({ caller }) func getOrCreateUser() : async Types.User {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
@@ -50,7 +58,8 @@ actor IcpTransfer_backend {
         _getOrCreateUser(caller);
     };
 
-    public shared ({ caller }) func getUser() : async Result.Result<Types.User, Text> {
+    // Query a user by principal
+    public shared query ({ caller }) func getUser() : async Result.Result<Types.User, Text> {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
         };
@@ -65,6 +74,7 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Withdraw funds from user account
     public shared ({ caller }) func withdrawFromUserAccount(amount : Nat, to : Principal, subaccount : ?Blob) : async Result.Result<Bool, Text> {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
@@ -104,6 +114,9 @@ actor IcpTransfer_backend {
         };
     };
 
+    // ======= PROPOSAL MANAGEMENT FUNCTIONS =======
+    
+    // Create a new proposal
     public shared ({ caller }) func createProposal(name : Text, title : Text, description : Text, amount_required : Nat64, image : Blob) : async Result.Result<Nat, Text> {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
@@ -142,6 +155,7 @@ actor IcpTransfer_backend {
         return #ok(proposal_size);
     };
 
+    // Claim funds from a successful proposal
     public shared ({ caller }) func claimProposal(proposalId : Nat) : async Result.Result<Bool, Text> {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
@@ -223,7 +237,8 @@ actor IcpTransfer_backend {
         };
     };
 
-    public func getProposal(id : Nat) : async Result.Result<Types.Proposal, Text> {
+    // Get a single proposal by ID
+    public query func getProposal(id : Nat) : async Result.Result<Types.Proposal, Text> {
         var size = Vector.size<Types.Proposal>(proposals);
         if (id >= size) {
             return #err("No Proposal is available with this id");
@@ -240,6 +255,7 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Get latest proposals with limit
     public query func getLatestProposals(len : Nat) : async Result.Result<[Types.Proposal], Text> {
         var size = Vector.size<Types.Proposal>(proposals);
         if (size > 0) {
@@ -255,6 +271,7 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Get latest proposals created by caller
     public shared query ({ caller }) func getLatestMyProposals(len : Nat) : async Result.Result<[Types.Proposal], Text> {
         if (Principal.isAnonymous(caller)) {
             Debug.trap("Anonymous User");
@@ -284,11 +301,212 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Get total number of proposals
     public query func getProposalsLength() : async Nat {
         var size = Vector.size<Types.Proposal>(proposals);
         return size;
     };
 
+    // ======= FILE MANAGEMENT FUNCTIONS =======
+    
+    // Get or create a file vector for a proposal
+    private func _getOrCreateProposalFiles(proposalId : Nat64) : Types.Vector<Types.File> {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                var new_files = Vector.new<Types.File>();
+                Map.set<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId, new_files);
+                return new_files;
+            };
+            case (?files) {
+                return files;
+            };
+        };
+    };
+
+    // Get all files for a proposal
+    public shared query func getProposalFiles(proposalId : Nat64) : async [Types.File] {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                return [];
+            };
+            case (?files) {
+                return Vector.toArray<Types.File>(files);
+            };
+        };
+    };
+
+    // Get files metadata for a proposal
+    public query func getProposalFilesList(proposalId : Nat64) : async [{
+        name : Text;
+        size : Nat;
+        fileType : Text;
+    }] {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                return [];
+            };
+            case (?files) {
+                var file_list = Buffer.Buffer<{ name : Text; size : Nat; fileType : Text }>(3);
+                for (file in Vector.vals<Types.File>(files)) {
+                    file_list.add({
+                        name = file.name;
+                        size = file.totalSize;
+                        fileType = file.fileType;
+                    });
+                };
+                return Buffer.toArray<{ name : Text; size : Nat; fileType : Text }>(file_list);
+            };
+        };
+    };
+
+    // Get number of chunks for a file in a proposal
+    public query func getProposalFileTotalChunks(proposalId : Nat64, name : Text) : async Nat {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                return 0;
+            };
+            case (?files) {
+                for (file in Vector.vals<Types.File>(files)) {
+                    if (file.name == name) {
+                        return file.chunks.size();
+                    };
+                };
+                return 0;
+            };
+        };
+    };
+
+    // Get a specific chunk of a file in a proposal
+    public query func getProposalFileChunk(proposalId : Nat64, name : Text, index : Nat) : async ?Types.FileChunk {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                return null;
+            };
+            case (?files) {
+                for (file in Vector.vals<Types.File>(files)) {
+                    if (file.name == name) {
+                        for (chunk in file.chunks.vals()) {
+                            if (chunk.index == index) {
+                                return ?chunk;
+                            };
+                        };
+                    };
+                };
+                return null;
+            };
+        };
+    };
+
+    // Get file type for a file in a proposal
+    public query func getProposalFileType(proposalId : Nat64, name : Text) : async ?Text {
+        switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+            case (null) {
+                return null;
+            };
+            case (?files) {
+                for (file in Vector.vals<Types.File>(files)) {
+                    if (file.name == name) {
+                        return ?file.fileType;
+                    };
+                };
+                return null;
+            };
+        };
+    };
+
+    // Upload a file chunk to a proposal
+    public shared ({ caller }) func uploadFileChunk(proposalId : Nat64, name : Text, chunk : Blob, index : Nat, fileType : Text) : async Result.Result<Bool, Text> {
+        if (Principal.isAnonymous(caller)) {
+            Debug.trap("Anonymous User");
+        };
+        var proposal = Vector.getOpt<Types.Proposal>(proposals, Nat64.toNat(proposalId));
+        switch (proposal) {
+            case (null) {
+                return #err("No Proposal is available with this id");
+            };
+            case (?proposal) {
+                if (caller != proposal.created_by) {
+                    return #err("Only Proposal Creator Can Call this Method");
+                };
+                var fileChunk : Types.FileChunk = {
+                    chunk = chunk;
+                    index = index;
+                };
+                var files = _getOrCreateProposalFiles(proposalId);
+                var found = false;
+                var updated_files = Vector.new<Types.File>();
+                for (file in Vector.vals<Types.File>(files)) {
+                    if (file.name == name) {
+                        found := true;
+                        var updated_chunks = Array.append<Types.FileChunk>(file.chunks, [fileChunk]);
+                        var updated_file : Types.File = {
+                            name = name;
+                            chunks = updated_chunks;
+                            totalSize = file.totalSize + chunk.size();
+                            fileType = fileType;
+                        };
+                        Vector.add<Types.File>(updated_files, updated_file);
+                    } else {
+                        Vector.add<Types.File>(updated_files, file);
+                    };
+                };
+                if (not found) {
+                    var new_file : Types.File = {
+                        name = name;
+                        chunks = [fileChunk];
+                        totalSize = chunk.size();
+                        fileType = fileType;
+                    };
+                    Vector.add<Types.File>(updated_files, new_file);
+                };
+                Map.set<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId, updated_files);
+                return #ok(true);
+            };
+        };
+    };
+
+    // Delete a file from a proposal
+    public shared ({ caller }) func deleteProposalFile(proposalId : Nat64, name : Text) : async Result.Result<Bool, Text> {
+        if (Principal.isAnonymous(caller)) {
+            Debug.trap("Anonymous User");
+        };
+        var proposal = Vector.getOpt<Types.Proposal>(proposals, Nat64.toNat(proposalId));
+        switch (proposal) {
+            case (null) {
+                return #err("No Proposal is available with this id");
+            };
+            case (?proposal) {
+                if (caller != proposal.created_by) {
+                    return #err("Only Proposal Creator Can Call this Method");
+                };
+                switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
+                    case (null) {
+                        return #err("No Files are available for this proposal");
+                    };
+                    case (?files) {
+                        var updated_files = Vector.new<Types.File>();
+                        var found = false;
+                        for (file in Vector.vals<Types.File>(files)) {
+                            if (file.name == name) {
+                                found := true;
+                            } else {
+                                Vector.add<Types.File>(updated_files, file);
+                            };
+                        };
+                        if (not found) {
+                            return #err("No File is available with this name");
+                        };
+                        Map.set<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId, updated_files);
+                        return #ok(true);
+                    };
+                };
+            };
+        };
+    };
+
+    // ======= UTILITY HELPER FUNCTIONS =======
+    
+    // Add a proposal to user's created proposals list
     private func addCreatedProposalToUsers(user : Types.User, proposalId : Nat64) : Types.User {
         var new_created_proposals = Buffer.fromArray<Nat64>(user.created_proposals);
         switch (Buffer.indexOf<Nat64>(proposalId, new_created_proposals, Nat64.equal)) {
@@ -309,6 +527,7 @@ actor IcpTransfer_backend {
         };
     };
 
+    // Update a user's locked balance
     private func setLockedBalance(user : Types.User, new_locked_balance : Nat64) : Types.User {
         let new_user : Types.User = {
             principal = user.principal;
@@ -320,6 +539,7 @@ actor IcpTransfer_backend {
         return new_user;
     };
 
+    // Mark a proposal as claimed
     private func setClaimed(proposal : Types.Proposal) : Types.Proposal {
         let new_proposal : Types.Proposal = {
             index = proposal.index;
@@ -336,11 +556,15 @@ actor IcpTransfer_backend {
         return new_proposal;
     };
 
-    public shared ({ caller }) func getCallerPrincipal() : async Text {
+    // ======= SYSTEM UTILITIES =======
+    
+    // Get caller principal as text
+    public shared query ({ caller }) func getCallerPrincipal() : async Text {
         return Principal.toText(caller);
     };
 
-    public shared ({ caller }) func getCallerAccountId() : async Text {
+    // Get caller account ID
+    public shared query ({ caller }) func getCallerAccountId() : async Text {
         return Utils.getAccountId(caller, null);
     };
 };
