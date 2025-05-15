@@ -27,7 +27,7 @@ actor IcpTransfer_backend {
     stable var fee_sink : Principal = Principal.fromText("gyvkh-qm3gw-myzkz-awlbs-g2yok-3qiuv-i44w2-mmzjj-jkd2r-wuikv-sae");
 
     // ======= USER MANAGEMENT FUNCTIONS =======
-    
+
     // Get or create a user based on caller principal
     private func _getOrCreateUser(caller : Principal) : Types.User {
         let user = Map.get<Principal, Types.User>(users, phash, caller);
@@ -88,7 +88,7 @@ actor IcpTransfer_backend {
                 let balance = await IcpLedger.account_balance_dfx({
                     account = user.accountId;
                 });
-                if (balance.e8s - user.locked_balance < Nat64.fromNat(amount)) {
+                if (balance.e8s - user.locked_balance < Nat64.fromNat(amount) + 10_000) {
                     return #err("Insufficient balance");
                 };
                 let transferResult = await IcpLedger.icrc1_transfer({
@@ -115,7 +115,7 @@ actor IcpTransfer_backend {
     };
 
     // ======= PROPOSAL MANAGEMENT FUNCTIONS =======
-    
+
     // Create a new proposal
     public shared ({ caller }) func createProposal(name : Text, title : Text, description : Text, amount_required : Nat64, image : Blob) : async Result.Result<Nat, Text> {
         if (Principal.isAnonymous(caller)) {
@@ -153,6 +153,60 @@ actor IcpTransfer_backend {
         var new_user2 = setLockedBalance(new_user, new_locked_balance);
         Map.set<Principal, Types.User>(users, phash, caller, new_user2);
         return #ok(proposal_size);
+    };
+
+    public shared ({ caller }) func donateToProposal(proposalId : Nat, amount : Nat64) : async Result.Result<Bool, Text> {
+        if (Principal.isAnonymous(caller)) {
+            Debug.trap("Anonymous User");
+        };
+        let user = Map.get<Principal, Types.User>(users, phash, caller);
+        switch (user) {
+            case (null) {
+                return #err("User not found");
+            };
+            case (?user) {
+                var balance = await IcpLedger.account_balance_dfx({
+                    account = user.accountId;
+                });
+                if (balance.e8s - user.locked_balance < amount + 10_000) {
+                    return #err("Insufficient balance");
+                };
+                var proposal = Vector.getOpt<Types.Proposal>(proposals, proposalId);
+                switch (proposal) {
+                    case (null) {
+                        return #err("No Proposal is available with this id");
+                    };
+                    case (?proposal) {
+                        var amount_raised = await IcpLedger.account_balance_dfx({
+                            account = proposal.accountId;
+                        });
+                        if (amount_raised.e8s >= proposal.amount_required) {
+                            return #err("Proposal has already reached the required amount");
+                        };
+                        let transferResult = await IcpLedger.icrc1_transfer({
+                            to = {
+                                owner = Principal.fromActor(IcpTransfer_backend);
+                                subaccount = ?proposal.subaccount;
+                            };
+                            fee = null;
+                            memo = ?Text.encodeUtf8("op:donate");
+                            from_subaccount = ?user.subaccount;
+                            created_at_time = null;
+                            amount = Nat64.toNat(amount);
+                        });
+                        switch (transferResult) {
+                            case (#Err(_)) {
+                                return #err("Transfer failed");
+                            };
+                            case (#Ok(_)) {
+                                return #ok(true);
+                            };
+                        };
+                    };
+                };
+
+            };
+        };
     };
 
     // Claim funds from a successful proposal
@@ -308,7 +362,7 @@ actor IcpTransfer_backend {
     };
 
     // ======= FILE MANAGEMENT FUNCTIONS =======
-    
+
     // Get or create a file vector for a proposal
     private func _getOrCreateProposalFiles(proposalId : Nat64) : Types.Vector<Types.File> {
         switch (Map.get<Nat64, Types.Vector<Types.File>>(proposal_files, n64hash, proposalId)) {
@@ -505,7 +559,7 @@ actor IcpTransfer_backend {
     };
 
     // ======= UTILITY HELPER FUNCTIONS =======
-    
+
     // Add a proposal to user's created proposals list
     private func addCreatedProposalToUsers(user : Types.User, proposalId : Nat64) : Types.User {
         var new_created_proposals = Buffer.fromArray<Nat64>(user.created_proposals);
@@ -557,7 +611,7 @@ actor IcpTransfer_backend {
     };
 
     // ======= SYSTEM UTILITIES =======
-    
+
     // Get caller principal as text
     public shared query ({ caller }) func getCallerPrincipal() : async Text {
         return Principal.toText(caller);
