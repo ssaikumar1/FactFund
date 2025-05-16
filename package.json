@@ -23,6 +23,7 @@
     "@dfinity/ledger-icp": "^2.6.13",
     "@dfinity/principal": "^2.4.1",
     "@dfinity/utils": "^2.13.0",
+    "lucide-react": "^0.509.0",
     "react-toastify": "^10.0.5"
   }
 }

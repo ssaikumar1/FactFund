@@ -1,7 +1,7 @@
 import "./init"
 import Navbar from './components/Navbar';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import UserSignup from './components/UserSignup';
+import Profile from './components/Profile.jsx';
 import CreateProposal from './components/CreateProposal';
 import Landing from './components/Landing';
 import Proposals from './components/Proposals';
@@ -62,7 +62,10 @@ function App() {
         <Route path="/createproposal" element={<CreateProposal notify={notify} actor={actor} />} />
         <Route path="/proposals" element={<Proposals notify={notify} actor={actor} />} />
         <Route path="/explore" element={<AllProposals notify={notify} actor={actor} />} />
-        <Route path="/profile" element={<UserSignup />} />
+        <Route
+  path="/profile"
+  element={<Profile principal={principal} accountId={accountId} actor={actor} />}
+/>
         <Route path="/proposal/:id" element={<DonateProposal notify={notify} actor={actor} principal={principal} />} />
       </Routes>
       <ToastContainer />

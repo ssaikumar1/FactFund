@@ -3,6 +3,7 @@ import { Actor, HttpAgent } from '@dfinity/agent';
 import { icpTransfer_backend, createActor } from "../../../declarations/icpTransfer_backend";
 import { Link } from 'react-router-dom';
 import { Principal } from '@dfinity/principal';
+import { AuthClient } from "@dfinity/auth-client";
 
 const Proposals = ({ notify, actor }) => {
   const [proposals, setProposals] = useState([]);

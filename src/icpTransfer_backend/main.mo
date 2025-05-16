@@ -155,6 +155,61 @@ actor IcpTransfer_backend {
         return #ok(proposal_size);
     };
 
+
+    public shared ({ caller }) func donateToProposal(proposalId : Nat, amount : Nat64) : async Result.Result<Bool, Text> {
+        if (Principal.isAnonymous(caller)) {
+            Debug.trap("Anonymous User");
+        };
+        let user = Map.get<Principal, Types.User>(users, phash, caller);
+        switch (user) {
+            case (null) {
+                return #err("User not found");
+            };
+            case (?user) {
+                var balance = await IcpLedger.account_balance_dfx({
+                    account = user.accountId;
+                });
+                if (balance.e8s - user.locked_balance < amount + 10_000) {
+                    return #err("Insufficient balance");
+                };
+                var proposal = Vector.getOpt<Types.Proposal>(proposals, proposalId);
+                switch (proposal) {
+                    case (null) {
+                        return #err("No Proposal is available with this id");
+                    };
+                    case (?proposal) {
+                        var amount_raised = await IcpLedger.account_balance_dfx({
+                            account = proposal.accountId;
+                        });
+                        if (amount_raised.e8s >= proposal.amount_required) {
+                            return #err("Proposal has already reached the required amount");
+                        };
+                        let transferResult = await IcpLedger.icrc1_transfer({
+                            to = {
+                                owner = Principal.fromActor(IcpTransfer_backend);
+                                subaccount = ?proposal.subaccount;
+                            };
+                            fee = null;
+                            memo = ?Text.encodeUtf8("op:donate");
+                            from_subaccount = ?user.subaccount;
+                            created_at_time = null;
+                            amount = Nat64.toNat(amount);
+                        });
+                        switch (transferResult) {
+                            case (#Err(_)) {
+                                return #err("Transfer failed");
+                            };
+                            case (#Ok(_)) {
+                                return #ok(true);
+                            };
+                        };
+                    };
+                };
+
+            };
+        };
+    };
+
     // Claim funds from a successful proposal
     public shared ({ caller }) func claimProposal(proposalId : Nat) : async Result.Result<Bool, Text> {
         if (Principal.isAnonymous(caller)) {

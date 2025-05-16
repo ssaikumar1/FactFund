@@ -29,8 +29,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       signerClientOptions={{
         targets: [canisterId]
       }}>
-      <Test />
-      {/* <App /> */}
+      {/* <Test /> */}
+      <App /> 
     </IdentityKitProvider>
   </Router>
   // </React.StrictMode>,
