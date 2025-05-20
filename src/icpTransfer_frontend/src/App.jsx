@@ -1,7 +1,7 @@
 import "./init"
 import Navbar from './components/Navbar';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import UserSignup from './components/UserSignup';
+import Profile from './components/Profile.jsx';
 import CreateProposal from './components/CreateProposal';
 import Landing from './components/Landing';
 import Proposals from './components/Proposals';
@@ -22,29 +22,7 @@ function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [actor, setActor] = useState(null)
 
-  useEffect(() => {
-    async function init() {
-      if (window.ic.plug) {
-        setIsPlugAvailable(true)
-        const connected = await window.ic.plug.isConnected();
-        setIsConnected(connected)
-        if (connected) {
-          setPrincipal(window.ic.plug.principalId)
-          setAccountId(window.ic.plug.accountId)
-          if (process.env.DFX_NETWORK == "local") {
-            const actor = icpTransfer_backend;
-            setActor(actor)
-            console.log("inlocal")
-          } else {
-            const actor = await window.ic.plug.createActor({ canisterId: canisterId, interfaceFactory: idlFactory });
-            setActor(actor)
-            console.log(process.env.DFX_NETWORK)
-          }
-        }
-      }
-    }
-    init()
-  }, [])
+  console.log("principal", principal)
 
   const notify = (msg) => toast(msg);
 
@@ -62,7 +40,10 @@ function App() {
         <Route path="/createproposal" element={<CreateProposal notify={notify} actor={actor} />} />
         <Route path="/proposals" element={<Proposals notify={notify} actor={actor} />} />
         <Route path="/explore" element={<AllProposals notify={notify} actor={actor} />} />
-        <Route path="/profile" element={<UserSignup />} />
+        <Route
+  path="/profile"
+  element={<Profile principal={principal} accountId={accountId} actor={actor} />}
+/>
         <Route path="/proposal/:id" element={<DonateProposal notify={notify} actor={actor} principal={principal} />} />
       </Routes>
       <ToastContainer />

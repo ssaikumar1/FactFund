@@ -1,36 +1,19 @@
-import React from 'react';
-
 const ProgressBar = ({ progress }) => {
-  const containerStyles = {
-    height: '20px',
-    width: '100%',
-    backgroundColor: '#5fa16f',
-    borderRadius: '50px',
-    margin: '50px 0'
-  };
-
-  const fillerStyles = {
-    height: '100%',
-    width: `${progress}%`,
-    backgroundColor: '#3bcc92',
-    borderRadius: 'inherit',
-    textAlign: 'right',
-    transition: 'width 0.5s ease-in-out'
-  };
-
-  const labelStyles = {
-    padding: '5px',
-    color: 'white',
-    fontWeight: 'bold'
-  };
+  // Ensure progress is between 0 and 100
+  const clampedProgress = Math.min(Math.max(progress, 0), 100)
 
   return (
-    <div style={containerStyles}>
-      <div style={fillerStyles}>
-        <span style={labelStyles}>{`${progress}%`}</span>
-      </div>
+    <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+      <div
+        className="h-full bg-primary transition-all duration-500 ease-in-out rounded-full"
+        style={{ width: `${clampedProgress}%` }}
+        role="progressbar"
+        aria-valuenow={clampedProgress}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      />
     </div>
-  );
-};
+  )
+}
 
-export default ProgressBar;
+export default ProgressBar
