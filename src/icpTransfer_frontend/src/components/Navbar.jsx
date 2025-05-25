@@ -1,35 +1,57 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useMemo } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAgent, ConnectWallet } from "@nfid/identitykit/react"
-import { Actor } from "@dfinity/agent"
-import { canisterId, idlFactory } from "../../../declarations/icpTransfer_backend"
+import { useState, useEffect, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  useAgent,
+  ConnectWallet,
+  ConnectedWalletButton,
+  ConnectWalletDropdownMenu,
+  ConnectWalletDropdownMenuButton,
+  ConnectWalletDropdownMenuItems,
+  ConnectWalletDropdownMenuDisconnectItem,
+  ConnectWalletDropdownMenuItem,
+  ConnectWalletDropdownMenuAddressItem,
+} from "@nfid/identitykit/react";
+import { Actor } from "@dfinity/agent";
+import {
+  canisterId,
+  idlFactory,
+} from "../../../declarations/icpTransfer_backend";
 
-const Navbar = ({ isConnected, principal, setPrincipal, setAccountId, setIsConnected, setActor }) => {
-  const [clicked, setClicked] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-  const [userData, setUserData] = useState(null)
-  const navigate = useNavigate()
+const Navbar = ({
+  isConnected,
+  principal,
+  setPrincipal,
+  setAccountId,
+  accountId,
+  setIsConnected,
+  setActor,
+  notify,
+}) => {
+  const [clicked, setClicked] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 10) {
-        setScrolled(true)
+        setScrolled(true);
       } else {
-        setScrolled(false)
+        setScrolled(false);
       }
-    }
+    };
 
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const handleClick = () => {
-    setClicked(!clicked)
-  }
+    setClicked(!clicked);
+  };
 
-  const agent = useAgent({ host: "http://localhost:4943" })
+  const agent = useAgent({ host: process.env.DFX_NETWORK === "local" ? "http://localhost:4943" : "https://ic0.app" });
 
   const authenticatedActor = useMemo(() => {
     return (
@@ -38,45 +60,92 @@ const Navbar = ({ isConnected, principal, setPrincipal, setAccountId, setIsConne
         agent: agent,
         canisterId: canisterId,
       })
-    )
-  }, [agent])
+    );
+  }, [agent]);
 
   // This effect runs when the agent or authenticatedActor changes
   useEffect(() => {
-    console.log("Agent:", agent)
-    console.log("Authenticated Actor:", authenticatedActor)
+    console.log("Agent:", agent);
+    console.log("Authenticated Actor:", authenticatedActor);
 
     const fetchUserData = async () => {
       if (authenticatedActor) {
-        try {
-          
-          await agent.fetchRootKey()
+        const connectToAccount = async () => {
+          if (process.env.DFX_NETWORK === "local") {
+            await agent.fetchRootKey();
+          }
 
           // Call the getOrCreateUser function
-          const user = await authenticatedActor.getOrCreateUser()
-          console.log("User data:", user)
-          setUserData(user)
+          const user = await authenticatedActor.getOrCreateUser();
+          console.log("User data:", user);
+          setUserData(user);
 
           // Set the principal and account ID in the parent component
           if (user) {
-            setPrincipal(user.principal.toString())
-            setAccountId(user.accountId)
-            setIsConnected(true)
-            setActor(authenticatedActor)
+            setPrincipal(user.principal.toString());
+            setAccountId(user.accountId);
+            setIsConnected(true);
+            setActor(authenticatedActor);
 
-         
-            console.log("Account ID:", user.accountId)
+            console.log("Account ID:", user.accountId);
+            return { accountId: user.accountId };
           }
-        } catch (error) {
-          console.error("Error fetching user data:", error)
+
+          throw new Error("Failed to get user data");
+        };
+
+        if (notify) {
+          notify.promise(connectToAccount(), {
+            pending: "Connecting to your account... 🔗",
+            success: "🎉 Successfully connected! Welcome back!",
+            error: "Failed to connect to your account. Please try again.",
+          });
+        } else {
+          // Fallback if notify is not available
+          try {
+            await connectToAccount();
+          } catch (error) {
+            console.error("Error fetching user data:", error);
+          }
         }
       }
-    }
+    };
 
     if (authenticatedActor) {
-      fetchUserData()
+      fetchUserData();
     }
-  }, [agent, authenticatedActor, setPrincipal, setAccountId, setIsConnected, setActor])
+  }, [
+    agent,
+    authenticatedActor,
+    setPrincipal,
+    setAccountId,
+    setIsConnected,
+    setActor,
+    notify,
+  ]);
+
+  function CustomConnectedWalletButton({
+    connectedAccount,
+    icpBalance,
+    ...props
+  }) {
+    return (
+      <ConnectedWalletButton {...props}>{`Disconnect`}</ConnectedWalletButton>
+    );
+  }
+
+  function DropdownMenu({ connectedAccount, icpBalance, disconnect }) {
+    return (
+      <ConnectWalletDropdownMenu>
+        <ConnectedWalletButton connectedAccount={connectedAccount} >
+          {accountId ? accountId.slice(0, 6) + "..." + accountId.slice(-4) : "..."}
+          </ConnectedWalletButton>
+        <ConnectWalletDropdownMenuItems style={{zIndex: 1000}}>
+          <ConnectWalletDropdownMenuDisconnectItem onClick={disconnect} />
+        </ConnectWalletDropdownMenuItems>
+      </ConnectWalletDropdownMenu>
+    );
+  }
 
   return (
     <nav className={scrolled ? "navbar scrolled" : "navbar"}>
@@ -97,8 +166,12 @@ const Navbar = ({ isConnected, principal, setPrincipal, setAccountId, setIsConne
             <li className="nav-item dropdown">
               <span className="nav-link">Proposals</span>
               <div className="dropdown-content">
-                <Link to="/createproposal" className="nav-link">Create Proposals</Link>
-                <Link to="/proposals" className="nav-link">My Proposals</Link>
+                <Link to="/createproposal" className="nav-link">
+                  Create Proposals
+                </Link>
+                <Link to="/proposals" className="nav-link">
+                  My Proposals
+                </Link>
               </div>
             </li>
 
@@ -117,15 +190,23 @@ const Navbar = ({ isConnected, principal, setPrincipal, setAccountId, setIsConne
             <li className="nav-item connect-btn">
               <ConnectWallet
                 onConnect={() => {
-                  console.log("Wallet connected via NFID")
+                  console.log("Wallet connected via NFID");
+                  if (notify) {
+                    notify.info("Wallet connection initiated...");
+                  }
                 }}
                 onDisconnect={() => {
-                  setIsConnected(false)
-                  setPrincipal(null)
-                  setAccountId(null)
-                  setUserData(null)
-                  setActor(null)
+                  setIsConnected(false);
+                  setPrincipal(null);
+                  setAccountId(null);
+                  setUserData(null);
+                  setActor(null);
+                  if (notify) {
+                    notify.success("Successfully disconnected from wallet");
+                  }
                 }}
+                connectedButtonComponent={CustomConnectedWalletButton}
+                dropdownMenuComponent={DropdownMenu}
               />
             </li>
           </ul>
@@ -138,13 +219,12 @@ const Navbar = ({ isConnected, principal, setPrincipal, setAccountId, setIsConne
 
       {userData && (
         <div className="user-info" style={{ display: "none" }}>
-      
           <p>Principal: {userData.principal?.toString()}</p>
           <p>Account ID: {userData.accountId}</p>
         </div>
       )}
     </nav>
-  )
-}
+  );
+};
 
-export default Navbar
+export default Navbar;

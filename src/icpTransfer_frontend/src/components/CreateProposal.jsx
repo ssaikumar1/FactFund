@@ -13,7 +13,7 @@ const CreateProposal = ({ notify, actor }) => {
     image: null,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [proposalFee, setProposalFee] = useState(2); // Default to 2 ICP
+  const [proposalFee, setProposalFee] = useState(1); // Default to 1 ICP
   const [userBalance, setUserBalance] = useState(0);
   const [accountId, setAccountId] = useState('');
 
@@ -21,40 +21,45 @@ const CreateProposal = ({ notify, actor }) => {
   useEffect(() => {
     const fetchProposalFeeAndBalance = async () => {
       if (actor) {
-        try {
-        
+        const loadAccountData = async () => {
           const userData = await actor.getOrCreateUser();
           console.log("User data:", userData);
           setAccountId(userData.accountId);
           
           // Get user balance from index canister
           if (userData.accountId) {
-            try {
-              console.log("Fetching balance for account:", userData.accountId);
-              const balanceE8s = await icp_index_canister.get_account_identifier_balance(userData.accountId);
-              console.log("Raw balance in e8s:", balanceE8s.toString());
-              
-              const balanceICP = Number(balanceE8s) / 10**8;
-              console.log("Balance in ICP:", balanceICP);
-              
-              setUserBalance(balanceICP);
-              
-              // Calculate available balance (total - locked)
-              const lockedBalanceICP = Number(userData.locked_balance) / 10**8;
-              console.log("Locked balance in ICP:", lockedBalanceICP);
-              
-              const availableBalanceICP = balanceICP - lockedBalanceICP;
-              console.log("Available balance in ICP:", availableBalanceICP);
-              
-              // Update user balance to available balance
-              setUserBalance(availableBalanceICP);
-            } catch (err) {
-              console.error("Error fetching balance:", err);
-            }
+            console.log("Fetching balance for account:", userData.accountId);
+            const balanceE8s = await icp_index_canister.get_account_identifier_balance(userData.accountId);
+            console.log("Raw balance in e8s:", balanceE8s.toString());
+            
+            const balanceICP = Number(balanceE8s) / 10**8;
+            console.log("Balance in ICP:", balanceICP);
+            
+            setUserBalance(balanceICP);
+            
+            // Calculate available balance (total - locked)
+            const lockedBalanceICP = Number(userData.locked_balance) / 10**8;
+            console.log("Locked balance in ICP:", lockedBalanceICP);
+            
+            const availableBalanceICP = balanceICP - lockedBalanceICP;
+            console.log("Available balance in ICP:", availableBalanceICP);
+            
+            // Update user balance to available balance
+            setUserBalance(availableBalanceICP);
+            
+            return { availableBalance: availableBalanceICP };
           }
-        } catch (err) {
-          console.error("Error fetching user data:", err);
-        }
+          throw new Error("No account ID found");
+        };
+
+        notify.promise(
+          loadAccountData(),
+          {
+            pending: 'Loading your account information...',
+            success: (data) => `Account loaded! Available balance: ${data.availableBalance.toFixed(4)} ICP`,
+            error: 'Failed to load account information'
+          }
+        );
       }
     };
     
@@ -70,18 +75,66 @@ const CreateProposal = ({ notify, actor }) => {
   };
 
   const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    
+    // Check if file is selected
+    if (!file) {
+      notify.error("No file selected");
+      return;
+    }
+    
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      notify.error("Please select a valid image file (JPG, PNG, GIF, etc.)");
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
+    // Check file size (2MB = 2 * 1024 * 1024 bytes)
+    const maxSizeInBytes = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxSizeInBytes) {
+      const fileSizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+      notify.error(`Image size is too large (${fileSizeInMB}MB). Please select an image smaller than 2MB`);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
     const reader = new FileReader();
-    console.log("Reading file...")
-    reader.onloadend = async () => {
-      const uri = reader.result;
-      console.log("File read complete");
-      const binary = convertDataURIToBinary(uri);
-      setFormData({
-        ...formData,
-        image: binary,
-      });
-    };
-    reader.readAsDataURL(e.target.files[0])
+    console.log("Reading file...", file.name, `(${(file.size / (1024 * 1024)).toFixed(2)}MB)`);
+    
+    const processFile = new Promise((resolve, reject) => {
+      reader.onloadend = async () => {
+        try {
+          const uri = reader.result;
+          console.log("File read complete");
+          const binary = convertDataURIToBinary(uri);
+          setFormData({
+            ...formData,
+            image: binary,
+          });
+          resolve(`Image "${file.name}" processed successfully`);
+        } catch (error) {
+          console.error("Error processing file:", error);
+          reject(new Error(`Failed to process image: ${error.message}`));
+        }
+      };
+      
+      reader.onerror = () => {
+        console.error("FileReader error");
+        reject(new Error("Failed to read the image file. Please try again with a different image."));
+      };
+      
+      reader.readAsDataURL(file);
+    });
+
+    notify.promise(
+      processFile,
+      {
+        pending: 'Processing image file...',
+        success: 'Image uploaded successfully! 📁',
+        error: (error) => error.message
+      }
+    );
   };
 
   const convertDataURIToBinary = dataURI =>
@@ -90,17 +143,37 @@ const CreateProposal = ({ notify, actor }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!actor) {
-      notify("Please Login To Continue");
+      notify.error("Please login to continue");
       return;
     }
     
     if (!formData.image) {
-      notify("No image file selected");
+      notify.warning("Please select an image for your proposal");
       return;
     }
     
-  
-    try {
+    if (!formData.name.trim()) {
+      notify.warning("Please enter your name");
+      return;
+    }
+    
+    if (!formData.title.trim()) {
+      notify.warning("Please enter a proposal title");
+      return;
+    }
+    
+    if (!formData.description.trim()) {
+      notify.warning("Please enter a proposal description");
+      return;
+    }
+    
+    if (!formData.goal || parseFloat(formData.goal) < 0.5) {
+      notify.warning("Goal must be at least 0.5 ICP");
+      return;
+    }
+
+    const createProposalProcess = async () => {
+      // Check balance first
       const userData = await actor.getOrCreateUser();
       const balanceE8s = await icp_index_canister.get_account_identifier_balance(userData.accountId);
       const balanceICP = Number(balanceE8s) / 10**8;
@@ -115,25 +188,15 @@ const CreateProposal = ({ notify, actor }) => {
       
       // Check if user has enough balance for the proposal fee
       if (availableBalanceICP < proposalFee) {
-        notify(`Insufficient balance. You need at least ${proposalFee} ICP available to create a proposal.`);
-        console.error(`Insufficient balance: ${availableBalanceICP} ICP available, ${proposalFee} ICP required`);
-        return;
+        throw new Error(`Insufficient balance. You need at least ${proposalFee} ICP available to create a proposal.`);
       }
-    } catch (err) {
-      console.error("Error checking balance before submission:", err);
-    }
-    
-    setIsLoading(true);
-    
-    try {
+
       console.log("Creating proposal with data:", {
         name: formData.name,
         title: formData.title,
         description: formData.description,
         goal: formData.goal,
-        
       });
-      
       
       const goalE8s = BigInt(Math.round(parseFloat(formData.goal) * 10**8));
       console.log("Goal in ICP:", formData.goal);
@@ -150,28 +213,39 @@ const CreateProposal = ({ notify, actor }) => {
       
       console.log('Proposal creation response:', response);
       
-   
       if ("ok" in response) {
         console.log("Proposal created successfully with ID:", Number(response.ok));
-        notify(`Proposal Created with id: ${Number(response.ok)}`);
-        navigate("/proposals");
+        const proposalId = Number(response.ok);
+        setTimeout(() => navigate("/proposals"), 1000);
+        return { proposalId };
       } else if ("err" in response) {
         console.error("Error creating proposal:", response.err);
-        notify(response.err);
+        throw new Error(response.err);
       } else if ("Ok" in response) {
         console.log("Proposal created successfully with ID:", Number(response.Ok));
-        notify(`Proposal Created with id: ${Number(response.Ok)}`);
-        navigate("/proposals");
+        const proposalId = Number(response.Ok);
+        setTimeout(() => navigate("/proposals"), 1000);
+        return { proposalId };
       } else if ("Err" in response) {
         console.error("Error creating proposal:", response.Err);
-        notify(response.Err);
+        throw new Error(response.Err);
       } else {
         console.log("Unknown response format:", response);
-        notify("Unknown response from backend");
+        throw new Error("Received unexpected response from server");
       }
-    } catch (error) {
-      console.error('Error creating proposal:', error);
-      notify(`Error creating proposal: ${error.message || error}`);
+    };
+
+    setIsLoading(true);
+    
+    try {
+      await notify.promise(
+        createProposalProcess(),
+        {
+          pending: 'Creating your proposal... 🚀',
+          success: (data) => `🎉 Proposal created successfully! ID: ${data.proposalId}`,
+          error: (error) => `Failed to create proposal: ${error.message}`
+        }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -265,7 +339,7 @@ const CreateProposal = ({ notify, actor }) => {
             onChange={handleFileChange}
             required
           />
-          <small>Please select an image for your campaign</small>
+          <small>Please select an image for your campaign (max 2MB)</small>
         </div>
         <button 
           className="submit-btn" 

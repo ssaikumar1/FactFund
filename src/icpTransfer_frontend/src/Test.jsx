@@ -6,7 +6,7 @@ import { Actor } from "@dfinity/agent";
 
 export default function Test() {
 
-    const agent = useAgent({host: "http://localhost:4943"})
+    const agent = useAgent({ host: process.env.DFX_NETWORK === "local" ? "http://localhost:4943" : "https://ic0.app" });
 
     const authenticatedActor = useMemo(() => {
         return (

@@ -12,7 +12,9 @@ import Test from './Test';
 
 const localInternetIdentity = {
   ...InternetIdentity,
-  providerUrl: "http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943"
+  providerUrl: process.env.DFX_NETWORK === "local"
+    ? 'http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943' : 'https://identity.internetcomputer.org/' // Mainnet
+
 }
 const signers = [
   NFIDW,
@@ -30,7 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         targets: [canisterId]
       }}>
       {/* <Test /> */}
-      <App /> 
+      <App />
     </IdentityKitProvider>
   </Router>
   // </React.StrictMode>,

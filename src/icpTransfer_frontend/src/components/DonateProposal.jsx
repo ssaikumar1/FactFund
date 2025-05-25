@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams } from "react-router-dom"
 import { Principal } from "@dfinity/principal"
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { icpTransfer_backend } from "../../../declarations/icpTransfer_backend"
 import { icp_index_canister } from '../../../declarations/icp_index_canister'
 
@@ -10,7 +11,6 @@ const DonateProposal = ({ actor, notify, principal }) => {
   const { id } = useParams()
   const [proposal, setProposal] = useState(null)
   const [amount, setAmount] = useState("")
-  const [claimPrincipal, setClaimPrincipal] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isClaiming, setIsClaiming] = useState(false)
@@ -32,14 +32,16 @@ const DonateProposal = ({ actor, notify, principal }) => {
   }
 
   const fetchProposalFiles = async () => {
-    if (!actor || !id) return
+    if (!id) return
 
     try {
       setIsLoadingFiles(true)
-      const filesList = await actor.getProposalFilesList(Number(id))
+      const filesList = await icpTransfer_backend.getProposalFilesList(Number(id))
       setProposalFiles(filesList)
+      return filesList;
     } catch (error) {
       console.error("Error fetching files:", error)
+      throw new Error("Failed to load proposal files");
     } finally {
       setIsLoadingFiles(false)
     }
@@ -47,20 +49,15 @@ const DonateProposal = ({ actor, notify, principal }) => {
 
   const fetchProposal = async () => {
     if (!id) {
-      notify("Invalid Proposal ID")
+      notify.error("Invalid Proposal ID")
       setIsLoading(false)
       return
     }
 
-    if (!actor) {
-      notify("Please Login To Continue")
-      setIsLoading(false)
-      return
-    }
-
-    try {
+    const loadProposal = async () => {
       setIsLoading(true)
-      const res = await actor.getProposal(Number(id))
+
+      const res = await icpTransfer_backend.getProposal(Number(id))
 
       if (res.ok) {
         const val = res.ok
@@ -71,35 +68,118 @@ const DonateProposal = ({ actor, notify, principal }) => {
         // Format proposal data with proper checks for amount_raised
         const amount_raised = Number(await icp_index_canister.get_account_identifier_balance(val.accountId)) / 10 ** 8
 
+        const txResult = await icp_index_canister.get_account_identifier_transactions({
+          account_identifier: val.accountId,
+          max_results: BigInt(100),
+          start: [],
+        });
+
+        let formattedTxs = [];
+
+        if (txResult && "Ok" in txResult) {
+          formattedTxs = txResult.Ok.transactions.map((tx, index) => {
+            try {
+              const transaction = tx.transaction;
+              let type = "unknown";
+              let accountId = "Unknown";
+              let amount = 0;
+              console.log("Transaction:", transaction, index);
+              const icrc1_memo = transaction.icrc1_memo.length > 0 ? transaction.icrc1_memo[0] : new Uint8Array();
+              const decoder = new TextDecoder();
+              const memo = decoder.decode(icrc1_memo);
+              console.log("Memo:", memo, index);
+              // Determine transaction type and details based on operation
+              if (transaction.operation && "Transfer" in transaction.operation) {
+                const transfer = transaction.operation.Transfer;
+                const from = transfer.from || "Unknown";
+                const to = transfer.to || "Unknown";
+                amount = transfer.amount && typeof transfer.amount.e8s !== 'undefined'
+                  ? Number(transfer.amount.e8s) / 10 ** 8
+                  : 0;
+
+                // Determine if this is a deposit, withdraw, donate, or claim
+                if (from === val.accountId) {
+                  // If the user is sending funds
+                  if (memo.includes("claim")) {
+                    type = "claim";
+                  } else if (memo.includes("fee")) {
+                    type = "fee";
+                  }
+                  accountId = to;
+                } else if (to === val.accountId) {
+                  type = "donate";
+                  accountId = from;
+                }
+              }
+
+              let timestamp = new Date();
+              if (transaction.timestamp && transaction.timestamp.length > 0 && typeof transaction.timestamp[0].timestamp_nanos !== 'undefined') {
+                timestamp = new Date(Number(Number(transaction.timestamp[0].timestamp_nanos) / 1_000_000));
+              }
+              return {
+                id: typeof tx.id !== 'undefined' ? Number(tx.id) : Math.random(),
+                accountId,
+                amount,
+                type,
+                timestamp,
+              };
+            } catch (err) {
+              console.error("Error processing transaction:", err, tx);
+
+              return {
+                id: Math.random(),
+                accountId: "Error",
+                amount: 0,
+                type: "unknown",
+                timestamp: new Date(),
+              };
+            }
+          });
+        } else if (txResult && "Err" in txResult) {
+          console.error("Error fetching transactions:", txResult.Err);
+        } else {
+          console.error("Unexpected transaction result format:", txResult);
+        }
+
+        console.log("formattedTxs", formattedTxs)
+
         const prop = {
           ...val,
           image: b64,
           created_by_text: Principal.from(val.created_by).toString(),
           amount_required: Number(val.amount_required) / 10 ** 8,
           amount_raised: amount_raised, // Add default of 0
-          donations: val.donations || [], // Ensure donations exists
+          donations: formattedTxs || [], // Ensure donations exists
         }
 
         setProposal(prop)
 
+        // Load files after proposal is loaded
+        await fetchProposalFiles()
 
-        fetchProposalFiles()
+        return prop;
       } else {
-        notify(res.err || "Failed to fetch proposal")
+        throw new Error(res.err || "Failed to fetch proposal");
       }
-    } catch (error) {
-      console.error("Error fetching proposal:", error)
-      notify(`Error: ${error.message || "Failed to fetch proposal"}`)
+    };
+
+    try {
+      await notify.promise(
+        loadProposal(),
+        {
+          pending: 'Loading proposal details... 📄',
+          success: 'Proposal loaded successfully! ✅',
+          error: (error) => `Error: ${error.message}`
+        }
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
   useEffect(() => {
-
-
     fetchProposal()
-  }, [actor, id, notify])
+  }, [id])
 
   const handleInputChange = (e) => {
     // Only allow numeric input with up to 8 decimal places
@@ -109,25 +189,77 @@ const DonateProposal = ({ actor, notify, principal }) => {
     }
   }
 
-  const handleClaimInputChange = (e) => {
-    setClaimPrincipal(e.target.value)
-  }
+  const getTransactionType = (type) => {
+    switch (type) {
+      case "claim":
+        return "Funds Claim";
+      case "fee":
+        return "2% Platform Fee";
+      case "donate":
+        return "Donate To Proposal";
+      default:
+        return type;
+    }
+  };
+
+  const getTransactionIcon = (type) => {
+    switch (type) {
+      case "donate":
+        return <ArrowDown className="transaction-icon deposit" />;
+      case "claim":
+        return <ArrowUp className="transaction-icon claim" />;
+      case "fee":
+        return <ArrowUp className="transaction-icon withdraw" />;
+      default:
+        return null;
+    }
+  };
+
+  const getTransactionClass = (type) => {
+    switch (type) {
+      case "donate":
+        return "deposit";
+      case "claim":
+        return "claim";
+      case "fee":
+        return "withdraw";
+      default:
+        return "";
+    }
+  };
+
+  const formatDate = (date) => {
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0])
+      notify.info(`File selected: ${e.target.files[0].name}`)
     }
   }
 
   // Function to handle donation
   const handleDonateClick = async () => {
     if (!amount || Number.parseFloat(amount) <= 0) {
-      notify("Please enter a valid amount")
+      notify.warning("Please enter a valid amount")
       return
     }
 
     if (!proposal) {
-      notify("Proposal data not available")
+      notify.error("Proposal data not available")
+      return
+    }
+
+    if (!actor) {
+      notify.warning("Please login to continue")
+      setIsLoading(false)
       return
     }
 
@@ -135,13 +267,13 @@ const DonateProposal = ({ actor, notify, principal }) => {
     const remainingToFund = proposal.amount_required - proposal.amount_raised
 
     if (amountToFund > remainingToFund) {
-      notify(`Amount must not exceed ${remainingToFund.toFixed(8)} ICP`)
+      notify.warning(`Amount must not exceed ${remainingToFund.toFixed(8)} ICP`)
       return
     }
 
     console.log("amountToFund", amountToFund, "remainingToFund", remainingToFund)
 
-    try {
+    const processDonation = async () => {
       const params = {
         to: proposal.accountId,
         amount: Math.round(amountToFund * 10 ** 8),
@@ -153,61 +285,88 @@ const DonateProposal = ({ actor, notify, principal }) => {
       console.log("result", result)
 
       if (result.ok) {
-        notify("Funding successful!")
+        setAmount("") // Clear the amount input
 
-        await fetchProposal()
+        return { amount: amountToFund };
+      } else {
+        throw new Error(result.err || "Unknown error");
       }
+    };
+
+    try {
+      await notify.promise(
+        processDonation(),
+        {
+          pending: 'Processing your donation... 💰',
+          success: (data) => `🎉 Donation successful! You donated ${data.amount} ICP`,
+          error: (error) => `Donation failed: ${error.message}`
+        }
+      );
     } catch (transferError) {
       console.error("Transfer error:", transferError)
-      notify(`Transfer failed: ${transferError.message || "Unknown error"}`)
+    }
+    finally {
+      setTimeout(async () => {
+        await fetchProposal()
+      }, 3000)
     }
   }
 
   // Function to handle claiming funds
   const handleClaimClick = async () => {
-    if (!claimPrincipal) {
-      notify("Please enter a principal ID")
+    if (!actor) {
+      notify.warning("Please login to continue")
+      setIsLoading(false)
       return
     }
 
-    try {
+    const processClaim = async () => {
       setIsClaiming(true)
 
       const result = await actor.claimProposal(Number(id))
 
       if (result.ok) {
-        notify(`Successfully claimed funds`)
-
         // Update proposal to show claimed status
         setProposal((prev) => ({
           ...prev,
           claimed: true,
         }))
 
-        setClaimPrincipal("") // Clear input after successful claim
+        return true;
       } else {
-        notify(`Error occurred: ${result.err || "Failed to claim funds"}`)
+        throw new Error(result.err || "Failed to claim funds");
       }
+    };
+
+    try {
+      await notify.promise(
+        processClaim(),
+        {
+          pending: 'Processing claim request... ⏳',
+          success: '🎉 Successfully claimed funds!',
+          error: (error) => {
+            return `Claim failed: ${error.message}`;
+          }
+        }
+      );
     } catch (error) {
-      if (error.message && error.message.includes("Invalid principal")) {
-        notify(`Invalid Principal: ${claimPrincipal}`)
-      } else {
-        console.error("Claim error:", error)
-        notify(`Error: ${error.message || "Failed to claim funds"}`)
-      }
+      console.error("Claim error:", error)
     } finally {
       setIsClaiming(false)
+      setTimeout(async () => {
+        await fetchProposal()
+      }, 3000)
     }
   }
 
   // Function to handle file upload
   const handleFileUpload = async () => {
     if (!selectedFile || !actor) {
-      notify("Please select a file first")
+      notify.warning("Please select a file first")
       return
     }
 
-    try {
+    const uploadFile = async () => {
       setIsUploading(true)
       setUploadProgress(0)
 
@@ -237,15 +396,25 @@ const DonateProposal = ({ actor, notify, principal }) => {
         setUploadProgress(progress)
       }
 
-      notify(`File "${selectedFile.name}" uploaded successfully`)
       setSelectedFile(null)
       setUploadProgress(0)
 
       // Refresh file list
-      fetchProposalFiles()
+      await fetchProposalFiles()
+      return { fileName: selectedFile.name };
+    };
+
+    try {
+      await notify.promise(
+        uploadFile(),
+        {
+          pending: `Uploading ${selectedFile.name}... 📤`,
+          success: (data) => `📁 File "${data.fileName}" uploaded successfully!`,
+          error: (error) => `Upload failed: ${error.message}`
+        }
+      );
     } catch (error) {
       console.error("Upload error:", error)
-      notify(`Upload failed: ${error.message || "Unknown error"}`)
     } finally {
       setIsUploading(false)
     }
@@ -253,13 +422,11 @@ const DonateProposal = ({ actor, notify, principal }) => {
 
   // Function to download a file
   const handleFileDownload = async (fileName, fileType) => {
-    if (!actor || !id) return
+    if (!id) return
 
-    try {
-      notify("Downloading file...")
-
+    const downloadFile = async () => {
       // Get total chunks
-      const totalChunks = await actor.getProposalFileTotalChunks(Number(id), fileName)
+      const totalChunks = await icpTransfer_backend.getProposalFileTotalChunks(Number(id), fileName)
 
       console.log("Total chunks:", totalChunks)
 
@@ -270,7 +437,7 @@ const DonateProposal = ({ actor, notify, principal }) => {
       // Download all chunks
       const chunks = []
       for (let i = 0; i < totalChunks; i++) {
-        const chunkResult = await actor.getProposalFileChunk(Number(id), fileName, i)
+        const chunkResult = await icpTransfer_backend.getProposalFileChunk(Number(id), fileName, i)
         console.log("Chunk result:", chunkResult)
         if (chunkResult) {
           chunks.push(chunkResult[0].chunk)
@@ -295,10 +462,20 @@ const DonateProposal = ({ actor, notify, principal }) => {
         URL.revokeObjectURL(url)
       }, 100)
 
-      notify("Download complete")
+      return { fileName };
+    };
+
+    try {
+      await notify.promise(
+        downloadFile(),
+        {
+          pending: 'Preparing download... ⬇️',
+          success: (data) => `📥 Download complete: ${data.fileName}`,
+          error: (error) => `Download failed: ${error.message}`
+        }
+      );
     } catch (error) {
       console.error("Download error:", error)
-      notify(`Download failed: ${error.message || "Unknown error"}`)
     }
   }
 
@@ -306,24 +483,66 @@ const DonateProposal = ({ actor, notify, principal }) => {
   const handleFileDelete = async (fileName) => {
     if (!actor || !id) return
 
-    try {
-      notify("Deleting file...")
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      return
+    }
 
+    const deleteFile = async () => {
       const result = await actor.deleteProposalFile(Number(id), fileName)
 
-      if (result.err) {
-        throw new Error(result.err)
+      if (result.ok) {
+        // Refresh file list
+        await fetchProposalFiles()
+        return { fileName };
+      } else {
+        throw new Error(result.err || "Unknown error");
       }
+    };
 
-      notify(`File "${fileName}" deleted successfully`)
-
-      // Refresh file list
-      fetchProposalFiles()
+    try {
+      await notify.promise(
+        deleteFile(),
+        {
+          pending: 'Deleting file... 🗑️',
+          success: (data) => `🗑️ File "${data.fileName}" deleted successfully`,
+          error: (error) => `Delete failed: ${error.message}`
+        }
+      );
     } catch (error) {
       console.error("Delete error:", error)
-      notify(`Delete failed: ${error.message || "Unknown error"}`)
     }
   }
+
+  const progressPercentage = useMemo(() => {
+    if (proposal && proposal.amount_raised && proposal.amount_required) {
+      return (proposal.amount_raised / proposal.amount_required) * 100
+    }
+    return 0
+  }, [proposal])
+  const isGoalReached = useMemo(() => {
+    if (proposal && proposal.amount_raised && proposal.amount_required) {
+      return proposal.amount_raised >= proposal.amount_required
+    }
+    return false
+  }, [proposal])
+  const isCreator = useMemo(() => {
+    if (proposal && proposal.created_by_text && principal) {
+      return proposal.created_by_text === principal
+    }
+    return false
+  }, [proposal, principal])
+  const canClaim = useMemo(() => {
+    if (proposal && proposal.amount_raised && proposal.amount_required) {
+      return isGoalReached && isCreator && !proposal.claimed && proposal.amount_raised > 0
+    }
+    return false
+  }, [isGoalReached, isCreator, proposal])
+  const remainingToFund = useMemo(() => {
+    if (proposal && proposal.amount_required && proposal.amount_raised) {
+      return Math.max(0, proposal.amount_required - proposal.amount_raised)
+    }
+    return 0
+  }, [proposal])
 
   if (isLoading) {
     return (
@@ -357,12 +576,6 @@ const DonateProposal = ({ actor, notify, principal }) => {
       </div>
     )
   }
-
-  const progressPercentage = (proposal.amount_raised / proposal.amount_required) * 100
-  const isGoalReached = proposal.amount_raised >= proposal.amount_required
-  const isCreator = proposal.created_by_text === principal
-  const canClaim = isGoalReached && isCreator && !proposal.claimed
-  const remainingToFund = Math.max(0, proposal.amount_required - proposal.amount_raised)
 
   return (
     <div className="proposal-details">
@@ -567,47 +780,12 @@ const DonateProposal = ({ actor, notify, principal }) => {
             )}
           </div>
 
-          {proposal.donations && proposal.donations.length > 0 && (
-            <div className="proposal-donators">
-              <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "15px" }}>Donations</h2>
-              <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                {proposal.donations.map((donation, index) => (
-                  <div
-                    key={index}
-                    style={{ padding: "12px", backgroundColor: "#1f1f21", borderRadius: "5px", marginBottom: "10px" }}
-                  >
-                    <div
-                      style={{ fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
-                      {donation.account}
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-                      <span style={{ fontSize: "14px", fontWeight: "500" }}>Amount:</span>
-                      <span style={{ fontSize: "14px", color: "#62d9aa" }}>
-                        {Number(donation.amount.e8s) / 10 ** 8} ICP
-                      </span>
-                    </div>
-                    <div style={{ marginTop: "8px", fontSize: "12px", color: "#b0b0b0" }}>
-                      <span style={{ fontWeight: "500" }}>Transaction:</span>{" "}
-                      <a
-                        href={`https://dashboard.internetcomputer.org/transaction/${Number(donation.transaction_id)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#62d9aa", textDecoration: "none" }}
-                      >
-                        {Number(donation.transaction_id)}
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
         </div>
       </div>
 
       <div className="right-section">
-        <div className="proposal-funding">
+        {!proposal.claimed && <div className="proposal-funding">
           <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "15px" }}>Funding Status</h2>
 
           <div style={{ marginBottom: "15px" }}>
@@ -675,7 +853,7 @@ const DonateProposal = ({ actor, notify, principal }) => {
               Funds Claimed
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Claim Funds Section - Only visible to creator when goal is reached and not claimed */}
         {canClaim && (
@@ -693,29 +871,6 @@ const DonateProposal = ({ actor, notify, principal }) => {
               As the creator, you can now claim {proposal.amount_raised.toFixed(8)} ICP
             </div>
 
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", color: "#b0b0b0" }}>Recipient Principal ID</label>
-              <input
-                type="text"
-                placeholder="xxxx-xxxx-xxxx-xxxx"
-                value={claimPrincipal}
-                onChange={handleClaimInputChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  backgroundColor: "#1f1f21",
-                  border: "none",
-                  borderRadius: "5px",
-                  color: "#ffffff",
-                  marginBottom: "10px",
-                }}
-                disabled={isClaiming}
-              />
-              <p style={{ fontSize: "12px", color: "#b0b0b0", marginBottom: "15px" }}>
-                Enter the principal ID where you want to receive the funds
-              </p>
-            </div>
-
             <button onClick={handleClaimClick} className="fund-button" disabled={isClaiming}>
               {isClaiming ? "Processing..." : "Claim Funds"}
             </button>
@@ -723,7 +878,7 @@ const DonateProposal = ({ actor, notify, principal }) => {
         )}
 
         {/* Donate Section - Only visible when goal is not reached */}
-        {!isGoalReached && (
+        {!isGoalReached && !proposal.claimed && (
           <div className="proposal-funding">
             <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "15px" }}>Donate</h2>
 
@@ -758,6 +913,66 @@ const DonateProposal = ({ actor, notify, principal }) => {
             </button>
           </div>
         )}
+
+        {proposal.claimed && (
+          <div className="proposal-funding">
+            <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "15px" }}>Claimed</h2>
+            <p>The funds have been claimed by the creator.</p>
+          </div>
+        )}
+
+        <div style={{ marginTop: "20px" }} className="transactions-section">
+          <h2>Transaction History</h2>
+          <p className="section-description">All transactions related to this proposal</p>
+
+          <div className="transactions-container">
+            <div className="transactions-header">
+              <div className="transaction-cell">Account ID</div>
+              <div className="transaction-cell">Amount</div>
+              <div className="transaction-cell">Type</div>
+            </div>
+
+            {proposal.donations && proposal.donations.length > 0 ? (
+              <div className="transactions-body">
+                {proposal.donations.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="transaction-row clickable"
+                    onClick={() => window.open(`https://dashboard.internetcomputer.org/transaction/${transaction.id}`, '_blank')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="transaction-cell from" data-label="Account ID:">
+                      <div className="account-info">
+                        <div className="account-id">
+                          {transaction.accountId && transaction.accountId.length > 10
+                            ? `${transaction.accountId.substring(0, 10)}...`
+                            : transaction.accountId}
+                        </div>
+                        <div className="transaction-date">
+                          {formatDate(transaction.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="transaction-cell amount" data-label="Amount:">
+                      {transaction.amount.toFixed(4)} ICP
+                    </div>
+                    <div
+                      className={`transaction-cell type ${getTransactionClass(transaction.type)}`}
+                      data-label="Type:"
+                    >
+                      {getTransactionIcon(transaction.type)}
+                      {getTransactionType(transaction.type)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="no-transactions">
+                <p>No transactions found for this proposal.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

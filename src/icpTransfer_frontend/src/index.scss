@@ -1,4 +1,3 @@
-
 * {
   margin: 0;
   padding: 0;
@@ -6,11 +5,11 @@
 }
 
 :root {
-  
   --background: #141416;
   --foreground: #ffffff;
   --primary: #17cf97;
   --primary-hover: #0fa97a;
+  --primary-dark: #0fa97a;
   --secondary: #1a1a1c;
   --secondary-dark: #0f0f10;
   --text-muted: #a0a0a0;
@@ -20,10 +19,16 @@
   --card-hover: #252527;
   --gradient-start: rgba(23, 207, 151, 0.1);
   --gradient-end: rgba(0, 0, 0, 0);
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   background-color: var(--background);
   color: var(--foreground);
   line-height: 1.6;
@@ -171,7 +176,6 @@ img {
   padding-top: 4rem;
 }
 
-
 .hero-section {
   position: relative;
   min-height: 80vh;
@@ -279,13 +283,11 @@ img {
   font-size: 1.1rem;
   color: var(--text-muted);
   max-width: 800px;
-  margin: 0 auto 2rem;
-  text-align: center;
 }
 
 /* Why Section */
 .why-section {
- // background-color: var(--secondary);
+  // background-color: var(--secondary);
   position: relative;
 }
 
@@ -388,7 +390,7 @@ img {
   //background-color: var(--secondary-dark);
   padding: 0rem 0 0rem;
   width: 100%;
-  
+
   //border-top: 1px solid var(--border-color);
 }
 
@@ -397,7 +399,7 @@ img {
   padding: 0;
   border: none;
   margin-left: calc(50% - 50vw);
- // border-top: 1px solid var(--border-color);
+  // border-top: 1px solid var(--border-color);
   width: 100vw;
 }
 
@@ -447,7 +449,7 @@ img {
   width: 40px;
   height: 40px;
   border-radius: 50%;
- // background-color: var(--secondary);
+  // background-color: var(--secondary);
   transition: all 0.3s ease;
 }
 
@@ -495,11 +497,11 @@ img {
   .hero-title {
     font-size: 3rem;
   }
-  
+
   .hero-subtitle {
     font-size: 1.25rem;
   }
-  
+
   .section-title {
     font-size: 2rem;
   }
@@ -509,7 +511,7 @@ img {
   .navbar-container {
     padding: 1rem;
   }
-  
+
   .nav-menu {
     position: fixed;
     top: 70px;
@@ -524,21 +526,21 @@ img {
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
     align-items: flex-start;
   }
-  
+
   .nav-menu.active {
     right: 0;
   }
-  
+
   .nav-item {
     width: 100%;
   }
-  
+
   .nav-link {
     display: block;
     padding: 1.5rem 2rem;
     font-size: 1.1rem;
   }
-  
+
   .dropdown-content {
     position: static;
     opacity: 1;
@@ -550,41 +552,41 @@ img {
     margin: 0;
     display: none;
   }
-  
+
   .dropdown-content a {
     padding: 1rem 3rem;
   }
-  
+
   .dropdown:hover .dropdown-content {
     display: block;
   }
-  
+
   .mobile-menu {
     display: block;
   }
-  
+
   .hero-section {
     padding: 2rem 1rem;
     min-height: 70vh;
   }
-  
+
   .hero-title {
     font-size: 2.5rem;
   }
-  
+
   .hero-subtitle {
     font-size: 1.1rem;
   }
-  
+
   .hero-buttons {
     flex-direction: column;
     gap: 1rem;
   }
-  
+
   .section-container {
     padding: 3rem 1rem;
   }
-  
+
   .features-grid {
     grid-template-columns: 1fr;
   }
@@ -594,16 +596,15 @@ img {
   .hero-title {
     font-size: 2rem;
   }
-  
+
   .section-title {
     font-size: 1.75rem;
   }
-  
+
   .feature-card {
     padding: 1.5rem;
   }
 }
-
 
 /* ConnectBtn Custom Styling */
 .connect-btn {
@@ -613,10 +614,6 @@ img {
   border-radius: 0.375rem;
   font-weight: 500;
   transition: background-color 0.3s ease;
-}
-
-.connect-btn:hover {
-  background-color: var(--primary-dark);
 }
 
 /* Custom Styling for Existing Components */
@@ -682,11 +679,10 @@ img {
   background-color: var(--primary-dark);
 }
 
-// createProposal 
+// createProposal
 
 body {
- // background-color: #1e1e1e;
-  
+  // background-color: #1e1e1e;
 }
 
 .form-container {
@@ -808,14 +804,24 @@ form {
   justify-content: center;
   align-items: center;
   height: 40vh;
-  background: linear-gradient(135deg, #141416, #141416); /* Gradient background */
+  background: linear-gradient(
+    135deg,
+    #141416,
+    #141416
+  ); /* Gradient background */
   animation: backgroundAnimation 10s ease infinite; /* Smooth background animation */
 }
 
 @keyframes backgroundAnimation {
-  0% { background: linear-gradient(135deg, #141416, #141416); }
-  50% { background: linear-gradient(135deg, #141416, #141416); }
-  100% { background: linear-gradient(135deg, #141416, #141416); }
+  0% {
+    background: linear-gradient(135deg, #141416, #141416);
+  }
+  50% {
+    background: linear-gradient(135deg, #141416, #141416);
+  }
+  100% {
+    background: linear-gradient(135deg, #141416, #141416);
+  }
 }
 
 .header {
@@ -824,7 +830,12 @@ form {
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent background */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.9
+  ); /* Slightly transparent background */
   backdrop-filter: blur(10px); /* Blur effect for background */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -856,18 +867,14 @@ form {
 }
 // landing page content
 body {
-  
   margin: 0;
   padding: 0;
-  
 }
 
 .landing-page {
   text-align: center;
   padding: 20px;
 }
-
-
 
 .header h1 {
   font-size: 2.5em;
@@ -880,18 +887,14 @@ body {
   margin: 10px 0 0;
 }
 
-
-
 .section {
   margin: 40px 0;
   padding: 20px;
- 
+
   border-radius: 10px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
-  
 }
-
 
 .section:hover {
   transform: scale(1.02);
@@ -902,7 +905,9 @@ body {
   margin-bottom: 20px;
 }
 
-.section p, .section ul, .section ol {
+.section p,
+.section ul,
+.section ol {
   text-align: left;
   font-size: 1.1em;
   line-height: 1.6;
@@ -924,20 +929,17 @@ body {
 
 .section ol {
   padding-left: 20px;
-  
-
 }
 
 .section ol li {
   padding: 10px 0;
 }
 .why {
-color: #fff;
+  color: #fff;
 }
 .why p {
-  padding-inline:40px;
+  padding-inline: 40px;
   padding-bottom: 5px;
-  
 }
 
 .cards-container {
@@ -954,7 +956,6 @@ color: #fff;
   width: 200px;
   text-align: center;
   transition: all 0.3s ease;
-  
 }
 .card2 img {
   width: 100px;
@@ -962,9 +963,8 @@ color: #fff;
   margin-bottom: 10px;
 }
 
-
 .card {
-  background: linear-gradient( white);
+  background: linear-gradient(white);
   border-radius: 10px;
   //box-shadow: 0 4px 6px rgba(244, 243, 243, 0.1);
   padding: 20px;
@@ -1028,7 +1028,9 @@ color: #fff;
     font-size: 1.5em;
   }
 
-  .section p, .section ul, .section ol {
+  .section p,
+  .section ul,
+  .section ol {
     font-size: 1em;
   }
 
@@ -1050,11 +1052,9 @@ color: #fff;
   margin: 0 auto;
   padding: 20px;
   text-align: center;
-  
 }
 
 .proposals-container h1 {
-  
   margin-bottom: 20px;
   color: #fff;
 }
@@ -1104,7 +1104,6 @@ color: #fff;
 .proposal-content strong {
   color: #333;
 }
-
 
 /* DonateProposal */
 .proposal-details {
@@ -1543,7 +1542,6 @@ color: #fff;
   font-size: 12px;
   text-align: center;
 }
-
 
 /* File Upload Styles */
 .file-upload-section {
@@ -2155,6 +2153,8 @@ color: #fff;
 
 .section-description {
   color: var(--gray-400);
+  width: 100%;
+  margin: auto;
   margin-bottom: 1.5rem;
 }
 
@@ -2275,13 +2275,29 @@ color: #fff;
   background-color: var(--primary-dark);
 }
 
+.transactions-section {
+  background-color: var(--gray-800);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 2rem;
+}
+
+.transactions-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
 .transactions-container {
   overflow-x: auto;
+  border-radius: 0.5rem;
+  background-color: var(--background);
 }
 
 .transactions-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 0.8fr 1.5fr 1fr;
+  grid-template-columns: 2fr 1fr 1.5fr;
   padding: 1rem;
   background-color: var(--background);
   border-radius: 0.5rem 0.5rem 0 0;
@@ -2291,14 +2307,26 @@ color: #fff;
 
 .transaction-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 0.8fr 1.5fr 1fr;
+  grid-template-columns: 2fr 1fr 1.5fr;
   padding: 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   transition: background-color 0.2s ease;
+  align-items: center;
 }
 
 .transaction-row:hover {
   background-color: rgba(255, 255, 255, 0.05);
+}
+
+.transaction-row.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transaction-row.clickable:hover {
+  background-color: rgba(23, 207, 151, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .transaction-cell {
@@ -2352,6 +2380,26 @@ color: #fff;
 .transaction-cell.date {
   font-size: 0.9rem;
   color: var(--gray-400);
+}
+
+/* Account info styling for DonateProposal transactions */
+.account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+}
+
+.account-id {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.transaction-date {
+  font-size: 0.8rem;
+  color: var(--gray-400);
+  font-family: inherit;
 }
 
 .no-transactions {
@@ -2409,6 +2457,181 @@ color: #fff;
   background-color: var(--primary-dark);
 }
 
+/* Withdraw Section Styles */
+.withdraw-section {
+  background-color: var(--gray-800);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 2rem;
+}
+
+.withdraw-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.withdraw-form {
+  max-width: 500px;
+}
+
+.withdraw-form .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.withdraw-form label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--gray-300);
+  margin-bottom: 0.5rem;
+}
+
+.withdraw-form .principal-input,
+.withdraw-form .amount-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: var(--background);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  color: #fff;
+  font-size: 1rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.withdraw-form .principal-input:focus,
+.withdraw-form .amount-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(23, 207, 151, 0.1);
+}
+
+.withdraw-form .principal-input::placeholder,
+.withdraw-form .amount-input::placeholder {
+  color: var(--gray-400);
+}
+
+.withdraw-form small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--gray-400);
+  margin-top: 0.25rem;
+}
+
+.withdraw-btn {
+  width: 100%;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.withdraw-btn:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(23, 207, 151, 0.3);
+}
+
+.withdraw-btn:disabled {
+  background-color: var(--gray-600);
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+
+.withdraw-form .error-message {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.withdraw-form .error-message::before {
+  content: "⚠️";
+  font-size: 1rem;
+}
+
+/* Responsive adjustments for withdraw section */
+@media (max-width: 768px) {
+  .withdraw-section {
+    padding: 1rem;
+  }
+
+  .withdraw-form {
+    max-width: 100%;
+  }
+
+  .withdraw-form .principal-input,
+  .withdraw-form .amount-input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* DonateProposal Layout Styles */
+.proposal-details {
+  display: flex;
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.proposal-details .left-section {
+  flex: 1;
+  max-width: 50%;
+  min-width: 0; /* Allows flex item to shrink below content size */
+}
+
+.proposal-details .right-section {
+  flex: 1;
+  max-width: 50%;
+  min-width: 0; /* Allows flex item to shrink below content size */
+}
+
+.proposal-image-section {
+  width: 100%;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.proposal-image-section img {
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  object-fit: cover;
+  display: block;
+  border-radius: 1rem;
+}
+
+/* Responsive layout for proposal details */
+@media (max-width: 1024px) {
+  .proposal-details {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .proposal-details .left-section,
+  .proposal-details .right-section {
+    max-width: 100%;
+    flex: none;
+  }
+}
+
 /* Responsive Adjustments for Mobile */
 @media (max-width: 768px) {
   .transactions-header {
@@ -2435,5 +2658,12 @@ color: #fff;
     color: var(--gray-400);
     margin-right: 0.5rem;
   }
+
+  .proposal-details {
+    padding: 1rem;
+  }
+
+  .proposal-image-section img {
+    max-height: 250px;
+  }
 }
-/////////////////////

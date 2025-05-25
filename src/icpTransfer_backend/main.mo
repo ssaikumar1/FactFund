@@ -23,7 +23,7 @@ actor IcpTransfer_backend {
     stable var proposals : Types.Vector<Types.Proposal> = Vector.new<Types.Proposal>();
     stable var proposal_files = Map.new<Nat64, Types.Vector<Types.File>>();
 
-    stable var proposal_fee : Nat64 = 2 * (10 ** 8); // 2 ICP in e8s
+    stable var proposal_fee : Nat64 = 1 * (10 ** 8); // 1 ICP in e8s
     stable var fee_sink : Principal = Principal.fromText("gyvkh-qm3gw-myzkz-awlbs-g2yok-3qiuv-i44w2-mmzjj-jkd2r-wuikv-sae");
 
     // ======= USER MANAGEMENT FUNCTIONS =======

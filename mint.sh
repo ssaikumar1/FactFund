@@ -2,13 +2,13 @@
 # Take two inputs from the user like CLI arguments
 # 1. account id
 # 2. amount
-from_account_id=$1
-to_account_id=$2
-amount=$3
+account_id=$1
+amount=$2
 
-dfx identity use $from_account_id
+# Use the minter identity
+dfx identity use minter
 
 # Perform the transfer
-dfx ledger transfer $to_account_id --amount $amount --memo 0
+dfx ledger transfer $account_id --amount $amount --memo 0 --fee 0
 
 dfx identity use default

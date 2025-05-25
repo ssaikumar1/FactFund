@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react"
 import { Copy, ExternalLink, ArrowDown, ArrowUp } from 'lucide-react'
 import { icp_index_canister } from '../../../declarations/icp_index_canister'
+import { Principal } from "@dfinity/principal"
 
-const Profile = ({ principal, accountId, actor }) => {
+const Profile = ({ principal, accountId, actor, notify }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [userData, setUserData] = useState(null)
@@ -14,6 +15,11 @@ const Profile = ({ principal, accountId, actor }) => {
     availableBalance: 0,
   })
   const [transactions, setTransactions] = useState([])
+  const [withdrawForm, setWithdrawForm] = useState({
+    recipientPrincipal: '',
+    amount: ''
+  })
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
 
   // Fetch user data, balance, and transactions
   useEffect(() => {
@@ -22,158 +28,178 @@ const Profile = ({ principal, accountId, actor }) => {
         setIsLoading(false);
         return;
       }
-      
-      try {
+
+      const loadProfileData = async () => {
         setIsLoading(true);
-         
+
         const user = await actor.getOrCreateUser();
         console.log("User data:", user);
         setUserData(user);
-        
+
         // If we have the account ID, fetch balance and transactions
         if (user.accountId) {
-          try {
-            console.log("Fetching balance for account:", user.accountId);
-         
-            const balanceE8s = await icp_index_canister.get_account_identifier_balance(user.accountId);
-            console.log("Balance in e8s:", balanceE8s.toString());
-          
-            const totalBalanceIcp = Number(balanceE8s) / 10**8;
-          
-            const lockedBalanceIcp = Number(user.locked_balance) / 10**8;
-    
-            const availableBalanceIcp = totalBalanceIcp - lockedBalanceIcp;
-            
-            setBalance({
-              totalBalance: totalBalanceIcp,
-              lockedBalance: lockedBalanceIcp,
-              availableBalance: availableBalanceIcp,
-            });
-            
-            // Fetch transactions
-            try {
-              console.log("Fetching transactions for account:", user.accountId);
-              
-              
-              const txResult = await icp_index_canister.get_account_identifier_transactions({
-                account_identifier: user.accountId,
-                max_results: BigInt(100), 
-                start: [], 
-              });
-              
-              console.log("Transaction result:", txResult);
-              
-              if (txResult && "Ok" in txResult) {
-            
-                const formattedTxs = txResult.Ok.transactions.map(tx => {
-                  try {
-                    const transaction = tx.transaction;
-                    let type = "unknown";
-                    let from = "";
-                    let to = "";
-                    let amount = 0;
-                    
-                    // Determine transaction type and details based on operation
-                    if (transaction.operation && "Transfer" in transaction.operation) {
-                      const transfer = transaction.operation.Transfer;
-                      from = transfer.from || "Unknown";
-                      to = transfer.to || "Unknown";
-                      amount = transfer.amount && typeof transfer.amount.e8s !== 'undefined' 
-                        ? Number(transfer.amount.e8s) / 10**8 
-                        : 0;
-                      
-                      // Determine if this is a deposit, withdraw, donate, or claim
-                      if (from === user.accountId) {
-                        // If the user is sending funds
-                        if (to.includes("proposal")) {
-                          type = "donate";
-                        } else {
-                          type = "withdraw";
-                        }
-                      } else if (to === user.accountId) {
-                        // If the user is receiving funds
-                        if (from.includes("proposal")) {
-                          type = "claim";
-                        } else {
-                          type = "deposit";
-                        }
-                      }
-                    } else if (transaction.operation && "Mint" in transaction.operation) {
-                      const mint = transaction.operation.Mint;
-                      to = mint.to || "Unknown";
-                      amount = mint.amount && typeof mint.amount.e8s !== 'undefined'
-                        ? Number(mint.amount.e8s) / 10**8
-                        : 0;
-                      type = "deposit";
-                      from = "Minting Account";
-                    } else if (transaction.operation && "Burn" in transaction.operation) {
-                      const burn = transaction.operation.Burn;
-                      from = burn.from || "Unknown";
-                      amount = burn.amount && typeof burn.amount.e8s !== 'undefined'
-                        ? Number(burn.amount.e8s) / 10**8
-                        : 0;
-                      type = "burn";
-                      to = "Burning Account";
-                    }
-                    
-           
-                    let timestamp = new Date();
-                    if (transaction.timestamp && typeof transaction.timestamp.timestamp_nanos !== 'undefined') {
-                      timestamp = new Date(Number(transaction.timestamp.timestamp_nanos) / 1000000);
-                    }
-                    
-                    return {
-                      id: typeof tx.id !== 'undefined' ? Number(tx.id) : Math.random(),
-                      from,
-                      to,
-                      amount,
-                      type,
-                      timestamp,
-                    };
-                  } catch (err) {
-                    console.error("Error processing transaction:", err, tx);
+          console.log("Fetching balance for account:", user.accountId);
+
+          const balanceE8s = await icp_index_canister.get_account_identifier_balance(user.accountId);
+          console.log("Balance in e8s:", balanceE8s.toString());
+
+          const totalBalanceIcp = Number(balanceE8s) / 10 ** 8;
+
+          const lockedBalanceIcp = Number(user.locked_balance) / 10 ** 8;
+
+          const availableBalanceIcp = totalBalanceIcp - lockedBalanceIcp;
+
+          setBalance({
+            totalBalance: totalBalanceIcp,
+            lockedBalance: lockedBalanceIcp,
+            availableBalance: availableBalanceIcp,
+          });
+
+          // Fetch transactions
+          console.log("Fetching transactions for account:", user.accountId);
+
+          const txResult = await icp_index_canister.get_account_identifier_transactions({
+            account_identifier: user.accountId,
+            max_results: BigInt(100),
+            start: [],
+          });
+
+          console.log("Transaction result:", txResult);
+
+          let formattedTxs = [];
+
+          if (txResult && "Ok" in txResult) {
+            formattedTxs = txResult.Ok.transactions.map((tx, index) => {
+              try {
+                const transaction = tx.transaction;
+                let type = "unknown";
+                let from = "";
+                let to = "";
+                let amount = 0;
+                console.log("Transaction:", transaction, index);
+                const icrc1_memo = transaction.icrc1_memo.length > 0 ? transaction.icrc1_memo[0] : new Uint8Array();
+                const decoder = new TextDecoder();
+                const memo = decoder.decode(icrc1_memo);
+                console.log("Memo:", memo, index);
+                // Determine transaction type and details based on operation
+                if (transaction.operation && "Transfer" in transaction.operation) {
+                  const transfer = transaction.operation.Transfer;
+                  from = transfer.from || "Unknown";
+                  to = transfer.to || "Unknown";
+                  amount = transfer.amount && typeof transfer.amount.e8s !== 'undefined'
+                    ? Number(transfer.amount.e8s) / 10 ** 8
+                    : 0;
                   
-                    return {
-                      id: Math.random(),
-                      from: "Error",
-                      to: "Error",
-                      amount: 0,
-                      type: "unknown",
-                      timestamp: new Date(),
-                    };
+                  // Determine if this is a deposit, withdraw, donate, or claim
+                  if (from === user.accountId) {
+                    // If the user is sending funds
+                    if (memo.includes("donate")) {
+                      type = "donate";
+                    } else {
+                      type = "withdraw";
+                    }
+                  } else if (to === user.accountId) {
+                    // If the user is receiving funds
+                    if (memo.includes("claim")) {
+                      type = "claim";
+                    } else {
+                      type = "deposit";
+                    }
                   }
-                });
-                
-                setTransactions(formattedTxs);
-              } else if (txResult && "Err" in txResult) {
-                console.error("Error fetching transactions:", txResult.Err);
-              } else {
-                console.error("Unexpected transaction result format:", txResult);
+                } else if (transaction.operation && "Mint" in transaction.operation) {
+                  const mint = transaction.operation.Mint;
+                  to = mint.to || "Unknown";
+                  amount = mint.amount && typeof mint.amount.e8s !== 'undefined'
+                    ? Number(mint.amount.e8s) / 10 ** 8
+                    : 0;
+                  type = "deposit";
+                  from = "Minting Account";
+                } else if (transaction.operation && "Burn" in transaction.operation) {
+                  const burn = transaction.operation.Burn;
+                  from = burn.from || "Unknown";
+                  amount = burn.amount && typeof burn.amount.e8s !== 'undefined'
+                    ? Number(burn.amount.e8s) / 10 ** 8
+                    : 0;
+                  type = "burn";
+                  to = "Burning Account";
+                }
+
+                let timestamp = new Date();
+                if (transaction.timestamp && transaction.timestamp.length > 0 && typeof transaction.timestamp[0].timestamp_nanos !== 'undefined') {
+                  timestamp = new Date(Number(Number(transaction.timestamp[0].timestamp_nanos) / 1_000_000));
+                }
+                return {
+                  id: typeof tx.id !== 'undefined' ? Number(tx.id) : Math.random(),
+                  from,
+                  to,
+                  amount,
+                  type,
+                  timestamp,
+                };
+              } catch (err) {
+                console.error("Error processing transaction:", err, tx);
+
+                return {
+                  id: Math.random(),
+                  from: "Error",
+                  to: "Error",
+                  amount: 0,
+                  type: "unknown",
+                  timestamp: new Date(),
+                };
               }
-            } catch (txErr) {
-              console.error("Error in transaction fetch:", txErr);
-              
-            }
-          } catch (err) {
-            console.error("Error fetching balance:", err);
-            
+            });
+          } else if (txResult && "Err" in txResult) {
+            console.error("Error fetching transactions:", txResult.Err);
+          } else {
+            console.error("Unexpected transaction result format:", txResult);
           }
+
+          setTransactions(formattedTxs);
+
+          return {
+            availableBalance: availableBalanceIcp,
+            transactionCount: formattedTxs.length
+          };
         }
-        
-        setIsLoading(false);
+
+        throw new Error("No account ID found");
+      };
+
+      try {
+        await notify.promise(
+          loadProfileData(),
+          {
+            pending: 'Loading your profile data... 👤',
+            success: (data) => `Profile loaded! Balance: ${data.availableBalance.toFixed(4)} ICP, ${data.transactionCount} transactions`,
+            error: (error) => `Failed to load profile data: ${error.message}`
+          }
+        );
       } catch (err) {
         console.error("Error fetching user data:", err);
         setError("Failed to load profile data. Please try again later.");
+      } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserData();
-  }, [actor, principal, accountId]);
+  }, [actor, principal, accountId, notify]);
 
   const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    const copyText = async () => {
+      await navigator.clipboard.writeText(text);
+      return text;
+    };
+
+    notify.promise(
+      copyText(),
+      {
+        pending: 'Copying to clipboard... 📋',
+        success: '📋 Copied to clipboard!',
+        error: 'Failed to copy to clipboard'
+      }
+    );
   };
 
   const formatDate = (date) => {
@@ -233,6 +259,99 @@ const Profile = ({ principal, accountId, actor }) => {
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!actor) {
+      notify.error("Please connect your wallet to withdraw funds");
+      return;
+    }
+
+    if (!withdrawForm.recipientPrincipal.trim()) {
+      notify.error("Please enter a recipient principal ID");
+      return;
+    }
+
+    if (!withdrawForm.amount || parseFloat(withdrawForm.amount) <= 0) {
+      notify.error("Please enter a valid withdrawal amount");
+      return;
+    }
+
+    const withdrawAmount = parseFloat(withdrawForm.amount);
+    if (withdrawAmount > balance.availableBalance) {
+      notify.error(`Withdrawal amount cannot exceed available balance (${balance.availableBalance.toFixed(4)} ICP)`);
+      return;
+    }
+
+    const withdrawProcess = async () => {
+      setIsWithdrawing(true);
+
+      try {
+        // Convert amount to e8s (1 ICP = 10^8 e8s)
+        const amountE8s = BigInt(Math.round(withdrawAmount * 10 ** 8));
+
+        console.log("Withdrawing:", {
+          recipient: withdrawForm.recipientPrincipal,
+          amount: withdrawAmount,
+          amountE8s: amountE8s.toString()
+        });
+
+        const recipientPrincipal = Principal.fromText(withdrawForm.recipientPrincipal);
+        // Call the withdraw function from the backend
+        const response = await actor.withdrawFromUserAccount(amountE8s, recipientPrincipal, []);
+
+        console.log('Withdrawal response:', response);
+
+        if ("ok" in response || "Ok" in response) {
+          // Clear the form
+          setWithdrawForm({
+            recipientPrincipal: '',
+            amount: ''
+          });
+
+          // Update balance immediately to reflect the withdrawal
+          setBalance(prevBalance => ({
+            ...prevBalance,
+            totalBalance: prevBalance.totalBalance - withdrawAmount,
+            availableBalance: prevBalance.availableBalance - withdrawAmount
+          }));
+
+          // Refresh the profile data after a delay to show the success toast
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+
+          return {
+            amount: withdrawAmount,
+            recipient: withdrawForm.recipientPrincipal
+          };
+        } else if ("err" in response) {
+          throw new Error(response.err);
+        } else if ("Err" in response) {
+          throw new Error(response.Err);
+        } else {
+          throw new Error("Unexpected response from server");
+        }
+      } catch (error) {
+        console.error("Withdrawal error:", error);
+        throw error;
+      } finally {
+        setIsWithdrawing(false);
+      }
+    };
+
+    try {
+      await notify.promise(
+        withdrawProcess(),
+        {
+          pending: 'Processing withdrawal... 💸',
+          success: (data) => `✅ Successfully withdrew ${data.amount} ICP to ${data.recipient.substring(0, 10)}...`,
+          error: (error) => `❌ Withdrawal failed: ${error.message}`
+        }
+      );
+    } catch (error) {
+      console.error("Withdrawal process failed:", error);
+    }
+  };
+
   return (
     <div className="profile-container">
       <div className="profile-header">
@@ -260,29 +379,8 @@ const Profile = ({ principal, accountId, actor }) => {
               </a>
             </div>
           </div>
-          
-          {userData?.principal && (
-            <div className="principal-id">
-              <h2>Principal ID</h2>
-              <div className="id-container">
-                <span className="id-text">{principal}</span>
-                <button
-                  className="icon-button"
-                  onClick={() => copyToClipboard(principal)}
-                >
-                  <Copy size={16} />
-                </button>
-                <a
-                  href={`https://dashboard.internetcomputer.org/principal/${principal}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="icon-button"
-                >
-                  <ExternalLink size={16} />
-                </a>
-              </div>
-            </div>
-          )}
+
+
         </div>
       </div>
 
@@ -322,7 +420,57 @@ const Profile = ({ principal, accountId, actor }) => {
                 <p className="balance-description">ICP available for use</p>
               </div>
             </div>
-{/*
+
+            <div className="withdraw-section">
+              <h2>Withdraw Funds</h2>
+              <p className="section-description">Transfer ICP from your account to another principal</p>
+
+              <div className="withdraw-form">
+                <div className="form-group">
+                  <label htmlFor="recipient-principal">Recipient Principal ID *</label>
+                  <input
+                    type="text"
+                    id="recipient-principal"
+                    value={withdrawForm.recipientPrincipal}
+                    onChange={(e) => setWithdrawForm({ ...withdrawForm, recipientPrincipal: e.target.value })}
+                    placeholder="Enter recipient's principal ID"
+                    className="principal-input"
+                  />
+                  <small>Enter the principal ID of the recipient</small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="withdraw-amount">Amount (ICP) *</label>
+                  <input
+                    type="number"
+                    id="withdraw-amount"
+                    step="0.0001"
+                    min="0.0001"
+                    max={balance.availableBalance}
+                    value={withdrawForm.amount}
+                    onChange={(e) => setWithdrawForm({ ...withdrawForm, amount: e.target.value })}
+                    placeholder="0.0000"
+                    className="amount-input"
+                  />
+                  <small>Available: {balance.availableBalance.toFixed(4)} ICP</small>
+                </div>
+
+                <button
+                  className="withdraw-btn"
+                  onClick={handleWithdraw}
+                  disabled={isWithdrawing || !withdrawForm.recipientPrincipal.trim() || !withdrawForm.amount || parseFloat(withdrawForm.amount) <= 0 || parseFloat(withdrawForm.amount) > balance.availableBalance}
+                >
+                  {isWithdrawing ? 'Processing Withdrawal...' : 'Withdraw Funds'}
+                </button>
+
+                {parseFloat(withdrawForm.amount) > balance.availableBalance && withdrawForm.amount && (
+                  <div className="error-message">
+                    Withdrawal amount cannot exceed available balance ({balance.availableBalance.toFixed(4)} ICP)
+                  </div>
+                )}
+              </div>
+            </div>
+            {/*
             {userData.created_proposals && userData.created_proposals.length > 0 && (
               <div className="proposals-section">
                 <h2>My Proposals</h2>
@@ -356,15 +504,20 @@ const Profile = ({ principal, accountId, actor }) => {
                 {transactions.length > 0 ? (
                   <div className="transactions-body">
                     {transactions.map((transaction) => (
-                      <div key={transaction.id} className="transaction-row">
+                      <div 
+                        key={transaction.id} 
+                        className="transaction-row clickable"
+                        onClick={() => window.open(`https://dashboard.internetcomputer.org/transaction/${transaction.id}`, '_blank')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="transaction-cell from" data-label="From:">
-                          {transaction.from && transaction.from.length > 10 
-                            ? `${transaction.from.substring(0, 10)}...` 
+                          {transaction.from && transaction.from.length > 10
+                            ? `${transaction.from.substring(0, 10)}...`
                             : transaction.from}
                         </div>
                         <div className="transaction-cell to" data-label="To:">
-                          {transaction.to && transaction.to.length > 10 
-                            ? `${transaction.to.substring(0, 10)}...` 
+                          {transaction.to && transaction.to.length > 10
+                            ? `${transaction.to.substring(0, 10)}...`
                             : transaction.to}
                         </div>
                         <div className="transaction-cell amount" data-label="Amount:">
