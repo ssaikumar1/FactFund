@@ -29,7 +29,7 @@ FactFund solves key trust and transparency issues in traditional crowdfunding by
 
 ## 🚀 Live Demo
 
-👉 [Launch FactFund on ICP](https://nv57a-iaaaa-aaaap-qhsqa-cai.icp0.io/)
+👉 [FactFund on ICP](https://nv57a-iaaaa-aaaap-qhsqa-cai.icp0.io/)
 
 ---
 
